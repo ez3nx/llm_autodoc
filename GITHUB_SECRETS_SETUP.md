@@ -12,7 +12,7 @@
   3. Создайте новый API ключ
   4. Скопируйте ключ (начинается с `sk-or-v1-...`)
 
-### 2. GITHUB_TOKEN_AUTODOC (опциональный)
+### 2. TOKEN_AUTODOC (опциональный)
 - **Назначение**: Персональный токен GitHub с расширенными правами
 - **Когда нужен**: Если стандартный `GITHUB_TOKEN` имеет недостаточные права
 - **Получение**:
@@ -29,12 +29,14 @@
 
 ### Шаг 2: Добавьте секреты
 1. Нажмите **New repository secret**
-2. Заполните поля:
+2. Добавьте первый секрет:
    - **Name**: `OPENROUTER_API_KEY`
    - **Secret**: ваш API ключ от OpenRouter
 3. Нажмите **Add secret**
-
-Повторите для других секретов при необходимости.
+4. Добавьте второй секрет (опционально):
+   - **Name**: `TOKEN_AUTODOC`
+   - **Secret**: ваш персональный GitHub токен
+5. Нажмите **Add secret**
 
 ## ✅ Проверка настройки
 
@@ -63,7 +65,7 @@
 - Убедитесь, что секрет добавлен в правильный репозиторий
 
 ### Ошибка: "Resource not accessible by integration"
-- Добавьте персональный токен `GITHUB_TOKEN_AUTODOC`
+- Добавьте персональный токен `TOKEN_AUTODOC`
 - Или используйте fallback режим (документация будет базовой)
 
 ### Ошибка: "API key invalid"
@@ -82,7 +84,7 @@
 Для локального использования создайте файл `.env`:
 ```bash
 OPENROUTER_API_KEY=your_api_key_here
-GITHUB_TOKEN_AUTODOC=your_github_token_here
+TOKEN_AUTODOC=your_github_token_here
 ```
 
 ---

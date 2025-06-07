@@ -80,7 +80,7 @@ class GitHubParser:
         if not github_token:
             # Пробуем разные переменные окружения
             github_token = (
-                os.getenv("GITHUB_TOKEN_AUTODOC")
+                os.getenv("TOKEN_AUTODOC")
                 or os.getenv("GITHUB_TOKEN")
                 or os.getenv("GH_TOKEN")
             )

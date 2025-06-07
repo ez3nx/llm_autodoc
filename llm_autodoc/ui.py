@@ -16,14 +16,13 @@ if project_root not in sys.path:
 import logging
 
 import streamlit as st
-from dotenv import load_dotenv
-
 from app.services.ast_analyzer import AstAnalyzer
 from app.services.doc_generator import (
     DocGenerator,  # Не используется в текущей логике README, но оставлен
 )
 from app.services.github_parser import GithubParser
 from app.services.llm_agent import LlmAgent  # Уже импортирован, все ок
+from dotenv import load_dotenv
 
 load_dotenv()  # Загружаем .env из корня проекта
 
@@ -167,13 +166,11 @@ st.markdown(
 # --- Инициализация сервисов ---
 @st.cache_resource
 def get_services():
-    github_token = os.getenv("GITHUB_TOKEN_AUTODOC")
+    github_token = os.getenv("TOKEN_AUTODOC")
     openrouter_api_key = os.getenv("OPENROUTER_API_KEY")  # Получаем ключ для OpenRouter
 
     if not github_token:
-        st.sidebar.error(
-            "GITHUB_TOKEN_AUTODOC не найден в .env. Пожалуйста, добавьте его."
-        )
+        st.sidebar.error("TOKEN_AUTODOC не найден в .env. Пожалуйста, добавьте его.")
         st.stop()
 
     # Ключ для LLM не является критичным для запуска самого UI,

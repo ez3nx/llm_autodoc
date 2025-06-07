@@ -50,6 +50,7 @@ jobs:
       env:
         OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        TOKEN_AUTODOC: ${{ secrets.TOKEN_AUTODOC }}
       run: |
         echo "🚀 Starting automatic documentation generation..."
         
