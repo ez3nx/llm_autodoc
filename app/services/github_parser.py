@@ -1,5 +1,3 @@
-# app/services/github_parser.py
-
 import os
 import re
 from typing import List, Dict, Optional, Any
@@ -10,13 +8,6 @@ from github import (
     GithubException,
 )
 from dotenv import load_dotenv
-
-# Загрузка переменных окружения, если этот файл запускается отдельно (для тестирования)
-# В основном приложении Streamlit это обычно делается в главном файле ui.py
-if __name__ == "__main__":
-    load_dotenv(
-        dotenv_path="../../.env"
-    )  # Укажите правильный путь к .env, если тестируете локально
 
 
 class GithubParser:
@@ -80,7 +71,7 @@ class GithubParser:
             )
         try:
             self.github_client = Github(github_token)
-            # Проверим токен, сделав простой запрос (например, к текущему пользователю)
+            # Проверим токен, сделав простой запрос
             _ = self.github_client.get_user().login
             print("GithubParser успешно инициализирован и токен валиден.")
         except RateLimitExceededException:
@@ -132,7 +123,6 @@ class GithubParser:
         """
         files_data: Dict[str, str] = {}
         try:
-            # print(f"DEBUG: Запрос содержимого для пути: '{path}', ветка: '{branch}'")
             contents = repo.get_contents(path, ref=branch)
         except UnknownObjectException:
             print(
@@ -148,9 +138,8 @@ class GithubParser:
             print(
                 f"Ошибка GitHub API при получении содержимого для '{path}' на ветке '{branch}': {e.data.get('message', str(e))}"
             )
-            return files_data  # Продолжаем, если это не критическая ошибка
+            return files_data
 
-        # get_contents может вернуть один элемент, если path - это файл
         if not isinstance(contents, list):
             contents = [contents]
 
@@ -338,65 +327,3 @@ class GithubParser:
             print(f"Произошла непредвиденная ошибка: {e}")
             traceback.print_exc()  # Для отладки
             return {}
-
-
-if __name__ == "__main__":
-    # Пример использования для локального тестирования
-    # Убедитесь, что у вас есть .env файл с GITHUB_TOKEN_AUTODOC в корне проекта или на два уровня выше
-    print("Тестирование GithubParser...")
-    try:
-        parser = GithubParser()  # Токен должен загрузиться из .env
-
-        # Пример репозитория для теста (замените на свой, если нужно)
-        # test_repo_url = "https://github.com/streamlit/streamlit" # Большой репозиторий, может быть долго
-        test_repo_url = "https://github.com/Korune/summarize.git"  # Небольшой репозиторий для быстрого теста
-        # test_repo_url = "https://github.com/pallets/flask"
-
-        print(f"\nТест 1: Получение Python файлов из {test_repo_url}")
-        python_files = parser.get_repo_files_content(
-            test_repo_url, target_languages=["python"]
-        )
-        if python_files:
-            print(f"Найдено {len(python_files)} Python файлов. Первые несколько:")
-            for i, (path, content_preview) in enumerate(list(python_files.items())[:3]):
-                print(
-                    f"  Файл: {path}, Размер: {len(content_preview)} байт, Превью: {content_preview[:100].replace(os.linesep, ' ')}..."
-                )
-        else:
-            print("Python файлы не найдены или произошла ошибка.")
-
-        print(f"\nТест 2: Получение всех файлов по умолчанию из {test_repo_url}")
-        all_default_files = parser.get_repo_files_content(test_repo_url)
-        if all_default_files:
-            print(
-                f"Найдено {len(all_default_files)} файлов (расширения по умолчанию). Первые несколько:"
-            )
-            for i, (path, content_preview) in enumerate(
-                list(all_default_files.items())[:3]
-            ):
-                print(
-                    f"  Файл: {path}, Размер: {len(content_preview)} байт, Превью: {content_preview[:100].replace(os.linesep, ' ')}..."
-                )
-        else:
-            print("Файлы (расширения по умолчанию) не найдены или произошла ошибка.")
-
-        # Тест с несуществующим репозиторием
-        print("\nТест 3: Несуществующий репозиторий")
-        non_existent_files = parser.get_repo_files_content(
-            "https://github.com/nonexistentuser/nonexistentrepo"
-        )
-        if not non_existent_files:
-            print(
-                "ОК: Несуществующий репозиторий обработан корректно (файлы не найдены)."
-            )
-
-        # Тест с неправильным URL
-        print("\nТест 4: Неправильный URL")
-        invalid_url_files = parser.get_repo_files_content("htp:/githubcom/user/repo")
-        if not invalid_url_files:
-            print("ОК: Неправильный URL обработан корректно (файлы не найдены).")
-
-    except ValueError as ve:
-        print(f"Ошибка при инициализации или использовании парсера: {ve}")
-    except Exception as e:
-        print(f"Непредвиденная ошибка во время тестов: {e}")

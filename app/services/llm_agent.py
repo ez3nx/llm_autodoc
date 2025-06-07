@@ -214,7 +214,7 @@ class LlmAgent:
             f"[LlmAgent] Генерация README. Стиль: {style}. Модель: {actual_model_name}"
         )
         prompt_text = self._construct_readme_prompt(ast_data, files_content, style)
-        
+
         readme_markdown = _ask_openrouter_llm(
             prompt=prompt_text,
             model_name=actual_model_name,
