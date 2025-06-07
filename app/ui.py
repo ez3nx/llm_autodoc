@@ -1,20 +1,29 @@
 # app/ui.py
-import sys
 import os
+import sys
 
 # Добавляем корневую директорию проекта (на один уровень выше 'app') в sys.path
-project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
+import logging
+
 import streamlit as st
 from dotenv import load_dotenv
-from app.services.github_parser import GithubParser
-from app.services.ast_analyzer import AstAnalyzer
-from app.services.llm_agent import LlmAgent # Уже импортирован, все ок
-from app.services.doc_generator import DocGenerator # Не используется в текущей логике README, но оставлен
 
-load_dotenv() # Загружаем .env из корня проекта
+from app.services.ast_analyzer import AstAnalyzer
+from app.services.doc_generator import (
+    DocGenerator,  # Не используется в текущей логике README, но оставлен
+)
+from app.services.github_parser import GithubParser
+from app.services.llm_agent import LlmAgent  # Уже импортирован, все ок
+
+load_dotenv()  # Загружаем .env из корня проекта
+
+# Configure logging for main UI
+logging.basicConfig(level=logging.INFO)
+ui_logger = logging.getLogger("ui_main")
 
 # --- Новые корпоративные цвета Lamoda Tech ---
 LAMODA_LIME_ACCENT = "#CDFE00"
@@ -31,7 +40,8 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-st.markdown(f"""
+st.markdown(
+    f"""
 <style>
     /* ... (ваши стили остаются без изменений) ... */
     body {{
@@ -143,31 +153,43 @@ st.markdown(f"""
         font-weight: 700; 
     }}
 </style>
-""", unsafe_allow_html=True)
+""",
+    unsafe_allow_html=True,
+)
+
 
 # --- Инициализация сервисов ---
 @st.cache_resource
 def get_services():
     github_token = os.getenv("GITHUB_TOKEN_AUTODOC")
-    openrouter_api_key = os.getenv("OPENROUTER_API_KEY") # Получаем ключ для OpenRouter
+    openrouter_api_key = os.getenv("OPENROUTER_API_KEY")  # Получаем ключ для OpenRouter
 
     if not github_token:
-        st.sidebar.error("GITHUB_TOKEN_AUTODOC не найден в .env. Пожалуйста, добавьте его.")
+        st.sidebar.error(
+            "GITHUB_TOKEN_AUTODOC не найден в .env. Пожалуйста, добавьте его."
+        )
         st.stop()
-    
+
     # Ключ для LLM не является критичным для запуска самого UI,
     # но LLM функционал не будет работать без него.
     # LlmAgent сам выведет предупреждение в консоль, если ключ отсутствует.
     # Можно добавить st.sidebar.warning, если ключ не найден, но это опционально.
     if not openrouter_api_key:
-        st.sidebar.warning("OPENROUTER_API_KEY не найден в .env. Генерация документации через LLM будет недоступна или вернет ошибку.")
+        st.sidebar.warning(
+            "OPENROUTER_API_KEY не найден в .env. Генерация документации через LLM будет недоступна или вернет ошибку."
+        )
 
     return {
         "github_parser": GithubParser(github_token=github_token),
         "ast_analyzer": AstAnalyzer(),
-        "llm_agent": LlmAgent(openrouter_api_key=openrouter_api_key), # Используем правильный ключ
-        "doc_generator": DocGenerator(template_dir="app/templates") # Оставлен, хотя не используется для README
+        "llm_agent": LlmAgent(
+            openrouter_api_key=openrouter_api_key
+        ),  # Используем правильный ключ
+        "doc_generator": DocGenerator(
+            template_dir="app/templates"
+        ),  # Оставлен, хотя не используется для README
     }
+
 
 services = get_services()
 github_parser = services["github_parser"]
@@ -183,7 +205,8 @@ if "error_message" not in st.session_state:
 
 # --- UI ---
 # Шапка
-st.markdown(f"""
+st.markdown(
+    f"""
 <div style="display: flex; align-items: center; margin-bottom: 2rem; padding: 1rem; background-color: {LAMODA_BLACK_BG}; border-bottom: 1px solid {LAMODA_MID_GRAY_BORDER};">
     <div style="font-size: 3rem; margin-right: 20px; color: {LAMODA_LIME_ACCENT};">📄</div>
     <div>
@@ -195,21 +218,26 @@ st.markdown(f"""
         </div>
     </div>
 </div>
-""", unsafe_allow_html=True)
+""",
+    unsafe_allow_html=True,
+)
 
 # Сайдбар для ввода данных
 with st.sidebar:
-    st.markdown(f"""
+    st.markdown(
+        f"""
     <div style="text-align: center; margin-bottom: 20px;">
         <div style="font-size: 2.5rem; color: {LAMODA_LIME_ACCENT}; margin-bottom: 10px;">⚙️</div>
         <h2 style="font-weight: 600; font-size: 1.4rem;">Настройки проекта</h2>
     </div>
-    """, unsafe_allow_html=True)
-    
+    """,
+        unsafe_allow_html=True,
+    )
+
     repo_url = st.text_input(
         "🔗 URL GitHub репозитория",
         placeholder="https://github.com/owner/repository",
-        help="Введите полный URL публичного GitHub репозитория."
+        help="Введите полный URL публичного GitHub репозитория.",
     )
 
     # Опционально: выбор модели LLM
@@ -231,91 +259,126 @@ with st.sidebar:
         if repo_url:
             st.session_state.generated_readme = None
             st.session_state.error_message = None
+
+            # Log the start of README generation process
+            ui_logger.info(
+                f"🚀 Starting README generation process for repository: {repo_url}"
+            )
+
             try:
                 with st.spinner("🚀 Магия ИИ в действии... Пожалуйста, подождите..."):
                     spinner_placeholder = st.empty()
-                    
+
                     spinner_placeholder.text("1/4: Получение файлов из репозитория...")
+                    ui_logger.info("📁 Step 1/4: Fetching files from repository")
                     files_content = github_parser.get_repo_files_content(repo_url)
                     if not files_content:
-                        st.session_state.error_message = "Не удалось получить файлы или репозиторий пуст/недоступен."
+                        ui_logger.error("❌ Failed to fetch files from repository")
+                        st.session_state.error_message = (
+                            "Не удалось получить файлы или репозиторий пуст/недоступен."
+                        )
                         spinner_placeholder.empty()
                         st.rerun()
 
+                    ui_logger.info(
+                        f"✅ Step 1/4 completed: Retrieved {len(files_content)} files"
+                    )
+
                     spinner_placeholder.text("2/4: Анализ структуры кода (AST)...")
                     ast_data = ast_analyzer.analyze_repository(files_content)
-                    
+
                     spinner_placeholder.text("3/4: Генерация описаний с помощью LLM...")
                     # Передаем выбранную модель и стиль, если добавили выбор в UI, иначе используются дефолтные
                     llm_output = llm_agent.generate_readme_content(
-                        ast_data, 
-                        files_content
+                        ast_data,
+                        files_content,
                         # style=readme_style, # если есть выбор стиля
                         # model_key=выбранная_модель_ключ # если есть выбор модели
                     )
 
-                    if llm_output.startswith("⚠️ Ошибка") or llm_output.startswith("# Ошибка"):
+                    if llm_output.startswith("⚠️ Ошибка") or llm_output.startswith(
+                        "# Ошибка"
+                    ):
                         st.session_state.error_message = f"Ошибка от LLM: {llm_output}"
                         spinner_placeholder.empty()
-                        st.rerun() # Перезапуск для отображения ошибки
+                        st.rerun()  # Перезапуск для отображения ошибки
 
-                    spinner_placeholder.text("4/4: Формирование финального README.md...")
+                    spinner_placeholder.text(
+                        "4/4: Формирование финального README.md..."
+                    )
                     final_readme = llm_output
                     st.session_state.generated_readme = final_readme
-                    
+
                     spinner_placeholder.empty()
                     st.success("🎉 Документация успешно сгенерирована!")
 
             except Exception as e:
-                st.session_state.error_message = f"Произошла непредвиденная ошибка: {str(e)}"
+                st.session_state.error_message = (
+                    f"Произошла непредвиденная ошибка: {str(e)}"
+                )
                 # st.exception(e) # Для детального трейсбека в UI, если нужно
-                print(f"UI Error: {e}") # Логируем ошибку в консоль
+                print(f"UI Error: {e}")  # Логируем ошибку в консоль
                 import traceback
-                traceback.print_exc() # Печатаем полный трейсбек в консоль сервера
-                if 'spinner_placeholder' in locals(): # Проверяем, существует ли переменная
+
+                traceback.print_exc()  # Печатаем полный трейсбек в консоль сервера
+                if (
+                    "spinner_placeholder" in locals()
+                ):  # Проверяем, существует ли переменная
                     spinner_placeholder.empty()
-                st.rerun() # Перезапуск для отображения ошибки
+                st.rerun()  # Перезапуск для отображения ошибки
         else:
             st.sidebar.warning("Пожалуйста, введите URL репозитория.")
 
 # Основная область для вывода
 if st.session_state.error_message:
-    st.error(f"🚫 {st.session_state.error_message}") # Убрал "Ошибка:" т.к. оно может быть в самой error_message
+    st.error(
+        f"🚫 {st.session_state.error_message}"
+    )  # Убрал "Ошибка:" т.к. оно может быть в самой error_message
 
 if st.session_state.generated_readme:
     st.markdown("---")
     st.subheader("📄 Сгенерированный README.md")
-    st.markdown(f"""
+    st.markdown(
+        f"""
     <div class="readme-container">
     {st.session_state.generated_readme}
     </div>
-    """, unsafe_allow_html=True)
-    
+    """,
+        unsafe_allow_html=True,
+    )
+
     st.download_button(
         label="💾 Скачать README.md",
         data=st.session_state.generated_readme,
         file_name="README_generated.md",
         mime="text/markdown",
         use_container_width=True,
-        type="secondary" # Это сделает кнопку акцентной по вашим стилям
+        type="secondary",  # Это сделает кнопку акцентной по вашим стилям
     )
-elif not st.session_state.error_message: # Показываем приветствие, только если нет ошибки и нет README
+elif (
+    not st.session_state.error_message
+):  # Показываем приветствие, только если нет ошибки и нет README
     st.info(
         "👋 Добро пожаловать! "
         "Введите URL GitHub репозитория в панели слева и нажмите 'Сгенерировать README'."
     )
-    st.markdown(f"""
+    st.markdown(
+        f"""
     #### Как это работает?
     1.  Загрузка файлов из вашего репозитория.
     2.  Анализ структуры кода (AST).
     3.  Генерация описаний и структуры документации с помощью LLM.
     4.  Готовый <span class="lamoda-lime-text">`README.md`</span> для вас!
-    """)
+    """
+    )
 
 # Подвал
 st.markdown("---")
-st.markdown(f"""
+st.markdown(
+    f"""
 <div style="text-align: center; padding: 1rem 0; font-size: 0.9rem; color: #777777;">
     Разработано с <span style="color: {LAMODA_LIME_ACCENT};">❤️</span> на хакатоне | <span class="logo-text-la">la</span><span class="logo-text-tech">tech</span> Inspired
 </div>
-""", unsafe_allow_html=True)
+""",
+    unsafe_allow_html=True,
+)
