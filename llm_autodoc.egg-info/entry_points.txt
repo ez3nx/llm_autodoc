@@ -1,0 +1,2 @@
+[console_scripts]
+llm-autodoc = llm_autodoc.cli:main

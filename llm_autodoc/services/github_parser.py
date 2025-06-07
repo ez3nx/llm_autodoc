@@ -1,4 +1,4 @@
-# app/services/github_parser.py
+# llm_autodoc/services/github_parser.py
 
 import logging
 import os
@@ -25,7 +25,7 @@ if __name__ == "__main__":
     )  # Укажите правильный путь к .env, если тестируете локально
 
 
-class GithubParser:
+class GitHubParser:
     """
     Сервис для взаимодействия с GitHub API с целью получения файлов репозитория и их содержимого.
     """
@@ -69,39 +69,54 @@ class GithubParser:
         3 * 1024 * 1024
     )  # 1 MB, ограничение на размер файла для загрузки через API
 
-    def __init__(self, github_token: Optional[str] = None):
+    def __init__(self, github_token: Optional[str] = None, validate_token: bool = True):
         """
         Инициализирует GithubParser.
 
         Args:
-            github_token: Токен GitHub API. Если не предоставлен, пытается загрузить GITHUB_TOKEN_AUTODOC из .env.
+            github_token: Токен GitHub API. Если не предоставлен, пытается загрузить из переменных окружения.
+            validate_token: Проверять ли токен при инициализации (по умолчанию True).
         """
         if not github_token:
-            github_token = os.getenv("GITHUB_TOKEN_AUTODOC")
+            # Пробуем разные переменные окружения
+            github_token = (
+                os.getenv("TOKEN_AUTODOC")
+                or os.getenv("GITHUB_TOKEN")
+                or os.getenv("GH_TOKEN")
+            )
 
         if not github_token:
-            raise ValueError(
-                "Токен GitHub API не предоставлен. "
-                "Передайте его в конструктор или установите переменную окружения GITHUB_TOKEN_AUTODOC."
+            print(
+                "ПРЕДУПРЕЖДЕНИЕ: GitHub токен не найден. Функционал GitHub API будет ограничен."
             )
+            self.github_client = None
+            self.files_processed_count = 0
+            return
+
         try:
             self.github_client = Github(github_token)
-            # Проверим токен, сделав простой запрос
-            _ = self.github_client.get_user().login
-            print("GithubParser успешно инициализирован и токен валиден.")
-        except RateLimitExceededException:
-            print(
-                "Ошибка инициализации GithubParser: Превышен лимит запросов GitHub API."
-            )
-            raise
-        except GithubException as e:
-            if e.status == 401:  # Unauthorized
-                print(
-                    "Ошибка инициализации GithubParser: Невалидный токен GitHub API (401 Unauthorized)."
-                )
+
+            if validate_token:
+                # Проверим токен, сделав простой запрос
+                try:
+                    _ = self.github_client.get_user().login
+                    print("GitHubParser успешно инициализирован и токен валиден.")
+                except GithubException as e:
+                    if e.status == 403:
+                        print(
+                            "ПРЕДУПРЕЖДЕНИЕ: GitHub токен имеет ограниченные права, но будет использован для локальных операций."
+                        )
+                    else:
+                        print(f"ПРЕДУПРЕЖДЕНИЕ: Ошибка при проверке токена: {e}")
             else:
-                print(f"Ошибка инициализации GithubParser при проверке токена: {e}")
-            raise
+                print("GitHubParser инициализирован без проверки токена.")
+
+        except RateLimitExceededException:
+            print("ПРЕДУПРЕЖДЕНИЕ: Превышен лимит запросов GitHub API.")
+            self.github_client = None
+        except Exception as e:
+            print(f"ПРЕДУПРЕЖДЕНИЕ: Ошибка инициализации GitHubParser: {e}")
+            self.github_client = None
 
         self.files_processed_count = 0
 
@@ -387,11 +402,11 @@ class GithubParser:
     def check_readme_exists(self, repo_url: str, branch: Optional[str] = None) -> bool:
         """
         Check if README file exists in the repository.
-        
+
         Args:
             repo_url: Full GitHub repository URL
             branch: Branch to check. If None, uses default branch
-            
+
         Returns:
             True if README exists, False otherwise
         """
@@ -399,16 +414,23 @@ class GithubParser:
         if not repo_full_name:
             print(f"Error: Invalid repository URL: {repo_url}")
             return False
-            
+
         try:
             repo = self.github_client.get_repo(repo_full_name)
-            
+
             if not branch:
                 branch = repo.default_branch
-                
+
             # Common README file names
-            readme_names = ["README.md", "readme.md", "README.MD", "README", "readme", "Readme.md"]
-            
+            readme_names = [
+                "README.md",
+                "readme.md",
+                "README.MD",
+                "README",
+                "readme",
+                "Readme.md",
+            ]
+
             for readme_name in readme_names:
                 try:
                     repo.get_contents(readme_name, ref=branch)
@@ -416,22 +438,24 @@ class GithubParser:
                     return True
                 except UnknownObjectException:
                     continue
-                    
+
             github_logger.info("❌ No README file found in repository")
             return False
-            
+
         except Exception as e:
             github_logger.error(f"❌ Error checking README existence: {e}")
             return False
-    
-    def get_recent_merged_prs(self, repo_url: str, limit: int = 10) -> List[Dict[str, Any]]:
+
+    def get_recent_merged_prs(
+        self, repo_url: str, limit: int = 10
+    ) -> List[Dict[str, Any]]:
         """
         Get recent merged pull requests from the repository.
-        
+
         Args:
             repo_url: Full GitHub repository URL
             limit: Maximum number of PRs to retrieve
-            
+
         Returns:
             List of dictionaries containing PR information
         """
@@ -439,63 +463,69 @@ class GithubParser:
         if not repo_full_name:
             print(f"Error: Invalid repository URL: {repo_url}")
             return []
-            
+
         try:
             repo = self.github_client.get_repo(repo_full_name)
-            
+
             # Get merged PRs (state='closed' and merged=True)
-            pulls = repo.get_pulls(state='closed', sort='updated', direction='desc')
-            
+            pulls = repo.get_pulls(state="closed", sort="updated", direction="desc")
+
             merged_prs = []
             count = 0
-            
+
             for pr in pulls:
                 if count >= limit:
                     break
-                    
+
                 if pr.merged:
                     pr_info = {
-                        'number': pr.number,
-                        'title': pr.title,
-                        'body': pr.body or '',
-                        'merged_at': pr.merged_at.isoformat() if pr.merged_at else None,
-                        'user': pr.user.login if pr.user else 'Unknown',
-                        'url': pr.html_url,
-                        'files_changed': []
+                        "number": pr.number,
+                        "title": pr.title,
+                        "body": pr.body or "",
+                        "merged_at": pr.merged_at.isoformat() if pr.merged_at else None,
+                        "user": pr.user.login if pr.user else "Unknown",
+                        "url": pr.html_url,
+                        "files_changed": [],
                     }
-                    
+
                     # Get files changed in this PR
                     try:
                         files = pr.get_files()
                         for file in files:
-                            pr_info['files_changed'].append({
-                                'filename': file.filename,
-                                'status': file.status,  # added, modified, removed
-                                'additions': file.additions,
-                                'deletions': file.deletions,
-                                'changes': file.changes
-                            })
+                            pr_info["files_changed"].append(
+                                {
+                                    "filename": file.filename,
+                                    "status": file.status,  # added, modified, removed
+                                    "additions": file.additions,
+                                    "deletions": file.deletions,
+                                    "changes": file.changes,
+                                }
+                            )
                     except Exception as e:
-                        github_logger.warning(f"⚠️ Could not get files for PR #{pr.number}: {e}")
-                    
+                        github_logger.warning(
+                            f"⚠️ Could not get files for PR #{pr.number}: {e}"
+                        )
+
                     merged_prs.append(pr_info)
                     count += 1
-                    
+
             github_logger.info(f"📋 Retrieved {len(merged_prs)} recent merged PRs")
             return merged_prs
-            
+
         except Exception as e:
             github_logger.error(f"❌ Error getting recent PRs: {e}")
             return []
 
-    def get_existing_readme_content(self, repo_url: str, branch: Optional[str] = None) -> Optional[str]:
+    def get_existing_readme_content(
+        self, repo_url: str, branch: Optional[str] = None
+    ) -> Optional[str]:
         """
         Get the content of existing README file from the repository.
-        
+
         Args:
             repo_url: Full GitHub repository URL
             branch: Branch to check. If None, uses default branch
-            
+
         Returns:
             README content as string, or None if not found
         """
@@ -503,29 +533,119 @@ class GithubParser:
         if not repo_full_name:
             print(f"Error: Invalid repository URL: {repo_url}")
             return None
-            
+
         try:
             repo = self.github_client.get_repo(repo_full_name)
-            
+
             if not branch:
                 branch = repo.default_branch
-                
+
             # Common README file names
-            readme_names = ["README.md", "readme.md", "README.MD", "README", "readme", "Readme.md"]
-            
+            readme_names = [
+                "README.md",
+                "readme.md",
+                "README.MD",
+                "README",
+                "readme",
+                "Readme.md",
+            ]
+
             for readme_name in readme_names:
                 try:
                     readme_file = repo.get_contents(readme_name, ref=branch)
-                    if hasattr(readme_file, 'decoded_content') and readme_file.decoded_content:
-                        content = readme_file.decoded_content.decode('utf-8', errors='ignore')
-                        github_logger.info(f"✅ Retrieved README content from: {readme_name}")
+                    if (
+                        hasattr(readme_file, "decoded_content")
+                        and readme_file.decoded_content
+                    ):
+                        content = readme_file.decoded_content.decode(
+                            "utf-8", errors="ignore"
+                        )
+                        github_logger.info(
+                            f"✅ Retrieved README content from: {readme_name}"
+                        )
                         return content
                 except UnknownObjectException:
                     continue
-                    
+
             github_logger.info("❌ No README file found in repository")
             return None
-            
+
         except Exception as e:
             github_logger.error(f"❌ Error getting README content: {e}")
             return None
+
+    def parse_local_repository(self, repo_path: str) -> Dict[str, str]:
+        """
+        Parse local repository directory and return files content.
+
+        Args:
+            repo_path: Path to the local repository directory
+
+        Returns:
+            Dictionary mapping file paths to their content
+        """
+        import os
+        from pathlib import Path
+
+        files_content = {}
+        repo_path = Path(repo_path)
+
+        if not repo_path.exists() or not repo_path.is_dir():
+            print(
+                f"Error: Repository path does not exist or is not a directory: {repo_path}"
+            )
+            return files_content
+
+        print(f"[GitHubParser] Parsing local repository: {repo_path}")
+
+        # Walk through all files in the repository
+        for root, dirs, files in os.walk(repo_path):
+            # Skip common directories that should be ignored
+            dirs[:] = [
+                d
+                for d in dirs
+                if not d.startswith(".")
+                and d
+                not in [
+                    "node_modules",
+                    "__pycache__",
+                    "venv",
+                    "env",
+                    "dist",
+                    "build",
+                    ".git",
+                    ".pytest_cache",
+                    "llm_autodoc.egg-info",
+                ]
+            ]
+
+            for file in files:
+                file_path = Path(root) / file
+                relative_path = file_path.relative_to(repo_path)
+
+                # Check if file extension is in our allowed list
+                _, ext = os.path.splitext(file)
+                if ext.lower() in self.DEFAULT_CODE_EXTENSIONS:
+                    try:
+                        # Check file size
+                        if file_path.stat().st_size > self.MAX_FILE_SIZE_BYTES:
+                            print(
+                                f"Skipping large file (>{file_path.stat().st_size / (1024*1024):.2f}MB): {relative_path}"
+                            )
+                            continue
+
+                        # Read file content
+                        with open(
+                            file_path, "r", encoding="utf-8", errors="ignore"
+                        ) as f:
+                            content = f.read()
+                            files_content[str(relative_path)] = content
+
+                    except Exception as e:
+                        print(f"Warning: Could not read file {relative_path}: {e}")
+                        continue
+
+        print(
+            f"[GitHubParser] Found {len(files_content)} relevant files in local repository"
+        )
+        return files_content

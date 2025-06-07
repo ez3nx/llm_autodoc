@@ -1,0 +1,285 @@
+Metadata-Version: 2.4
+Name: llm-autodoc
+Version: 0.1.0
+Summary: Automatic documentation generation using LLM for code repositories
+Home-page: https://github.com/yourusername/llm_autodoc
+Author: Your Name
+Author-email: your.email@example.com
+Classifier: Development Status :: 3 - Alpha
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Operating System :: OS Independent
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.8
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Requires-Python: >=3.8
+Description-Content-Type: text/markdown
+License-File: LICENSE
+Requires-Dist: aiohttp>=3.9.5
+Requires-Dist: aiosignal==1.3.2
+Requires-Dist: altair==5.5.0
+Requires-Dist: anyio==4.8.0
+Requires-Dist: asttokens==2.4.1
+Requires-Dist: async-timeout==4.0.3
+Requires-Dist: attrs==25.3.0
+Requires-Dist: blinker==1.9.0
+Requires-Dist: cachetools==5.5.2
+Requires-Dist: certifi==2024.12.14
+Requires-Dist: cffi==1.17.1
+Requires-Dist: charset-normalizer==2.1.1
+Requires-Dist: click==8.1.8
+Requires-Dist: colorama==0.4.6
+Requires-Dist: comm==0.2.2
+Requires-Dist: cryptography==45.0.3
+Requires-Dist: debugpy==1.8.1
+Requires-Dist: decorator==5.1.1
+Requires-Dist: Deprecated==1.2.18
+Requires-Dist: dotenv==0.9.9
+Requires-Dist: exceptiongroup==1.2.1
+Requires-Dist: executing==2.0.1
+Requires-Dist: fake-useragent==2.0.3
+Requires-Dist: frozenlist==1.6.2
+Requires-Dist: gitdb==4.0.12
+Requires-Dist: GitPython==3.1.44
+Requires-Dist: h11==0.14.0
+Requires-Dist: httpcore==1.0.7
+Requires-Dist: httpx==0.28.1
+Requires-Dist: idna==3.10
+Requires-Dist: importlib_metadata==7.1.0
+Requires-Dist: importlib_resources==6.5.2
+Requires-Dist: ipykernel==6.29.5
+Requires-Dist: ipython==8.18.1
+Requires-Dist: jedi==0.19.1
+Requires-Dist: Jinja2==3.1.6
+Requires-Dist: jsonschema==4.24.0
+Requires-Dist: jsonschema-specifications==2025.4.1
+Requires-Dist: jupyter_client==8.6.1
+Requires-Dist: jupyter_core==5.7.2
+Requires-Dist: MarkupSafe==3.0.2
+Requires-Dist: matplotlib-inline==0.1.7
+Requires-Dist: multidict==6.4.4
+Requires-Dist: narwhals==1.41.1
+Requires-Dist: nest-asyncio==1.6.0
+Requires-Dist: numpy==2.0.2
+Requires-Dist: packaging==24.0
+Requires-Dist: pandas==2.3.0
+Requires-Dist: parso==0.8.4
+Requires-Dist: pillow==11.2.1
+Requires-Dist: platformdirs==4.2.1
+Requires-Dist: prompt-toolkit==3.0.43
+Requires-Dist: propcache==0.3.1
+Requires-Dist: protobuf==6.31.1
+Requires-Dist: psutil==5.9.8
+Requires-Dist: pure-eval==0.2.2
+Requires-Dist: pyarrow==20.0.0
+Requires-Dist: pycparser==2.22
+Requires-Dist: pydeck==0.9.1
+Requires-Dist: PyGithub==2.6.1
+Requires-Dist: Pygments==2.17.2
+Requires-Dist: PyJWT==2.10.1
+Requires-Dist: PyNaCl==1.5.0
+Requires-Dist: python-dateutil==2.9.0.post0
+Requires-Dist: python-dotenv==1.1.0
+Requires-Dist: pytz==2025.2
+Requires-Dist: pyzmq==26.0.2
+Requires-Dist: referencing==0.36.2
+Requires-Dist: requests==2.32.3
+Requires-Dist: rpds-py==0.25.1
+Requires-Dist: six==1.16.0
+Requires-Dist: smmap==5.0.2
+Requires-Dist: sniffio==1.3.1
+Requires-Dist: stack-data==0.6.3
+Requires-Dist: streamlit==1.45.1
+Requires-Dist: tenacity==9.1.2
+Requires-Dist: toml==0.10.2
+Requires-Dist: tornado==6.4
+Requires-Dist: tpulse==0.1.9
+Requires-Dist: traitlets==5.14.3
+Requires-Dist: typing_extensions==4.11.0
+Requires-Dist: tzdata==2025.2
+Requires-Dist: urllib3==2.4.0
+Requires-Dist: watchdog==6.0.0
+Requires-Dist: wcwidth==0.2.13
+Requires-Dist: wrapt==1.17.2
+Requires-Dist: yarl==1.20.0
+Requires-Dist: zipp==3.18.1
+Dynamic: author
+Dynamic: author-email
+Dynamic: classifier
+Dynamic: description
+Dynamic: description-content-type
+Dynamic: home-page
+Dynamic: license-file
+Dynamic: requires-dist
+Dynamic: requires-python
+Dynamic: summary
+
+# LLM AutoDoc 🤖📚
+
+Автоматическая генерация документации для кодовых репозиториев с использованием больших языковых моделей (LLM).
+
+## 🚀 Возможности
+
+- ✅ **Автоматический анализ кода** - анализирует структуру проекта и зависимости
+- ✅ **Генерация README** - создает comprehensive документацию на основе анализа кода
+- ✅ **CI/CD интеграция** - автоматически обновляет документацию при изменениях
+- ✅ **Множественные LLM модели** - поддержка Claude, GPT, Gemini
+- ✅ **Гибкие стили** - от краткого описания до детальной технической документации
+- ✅ **CLI интерфейс** - простое использование из командной строки
+- ✅ **Python API** - программный доступ ко всем функциям
+
+## 📦 Установка
+
+```bash
+# Установка из исходников (пока не опубликовано в PyPI)
+git clone https://github.com/yourusername/llm_autodoc.git
+cd llm_autodoc
+pip install -e .
+```
+
+## 🔧 Быстрый старт
+
+### 1. Настройка переменных окружения
+
+```bash
+export OPENROUTER_API_KEY="your_openrouter_api_key"
+export GITHUB_TOKEN="your_github_token"
+```
+
+### 2. Генерация документации
+
+```bash
+# Генерация README для текущего проекта
+llm-autodoc generate .
+
+# С указанием модели и стиля
+llm-autodoc generate . --model claude-sonnet --style detailed
+
+# Обновление существующей документации
+llm-autodoc update . --readme README.md
+```
+
+### 3. Использование Python API
+
+```python
+from llm_autodoc import LlmAgent, GitHubParser, ASTAnalyzer
+
+# Инициализация сервисов
+llm_agent = LlmAgent(openrouter_api_key="your-key")
+github_parser = GitHubParser(github_token="your-token")
+ast_analyzer = ASTAnalyzer()
+
+# Анализ репозитория
+ast_data = ast_analyzer.analyze_directory("/path/to/repo")
+files_content = github_parser.parse_local_repository("/path/to/repo")
+
+# Генерация документации
+readme_content = llm_agent.generate_readme_content(
+    ast_data=ast_data,
+    files_content=files_content,
+    style="summary"
+)
+```
+
+## 🔄 CI/CD Интеграция
+
+### GitHub Actions
+
+Проект включает готовый workflow для автоматической генерации документации:
+
+- 🎯 Запускается при создании/обновлении Pull Request
+- 📊 Анализирует изменения в коде
+- 📝 Генерирует обновленную документацию
+- 💬 Создает комментарии и код-ревью в PR
+- ✅ Автоматически коммитит изменения
+
+Настройка:
+1. Добавьте секреты `OPENROUTER_API_KEY` и `GITHUB_TOKEN` в настройки репозитория
+2. Workflow автоматически активируется при создании PR
+
+### Другие CI/CD системы
+
+Поддерживается интеграция с:
+- GitLab CI
+- Jenkins
+- Azure DevOps
+- CircleCI
+
+См. [SETUP_INSTRUCTIONS.md](SETUP_INSTRUCTIONS.md) для подробных инструкций.
+
+## 🎨 Поддерживаемые модели и стили
+
+### LLM Модели
+- `gemini-flash` - быстрая и экономичная (по умолчанию)
+- `claude-sonnet` - высокое качество текста
+- `gpt-4o-mini` - сбалансированный вариант
+
+### Стили документации
+- `summary` - краткое описание (по умолчанию)
+- `detailed` - подробная документация
+- `technical` - техническая документация с API деталями
+
+## 📁 Структура проекта
+
+```
+llm_autodoc/
+├── llm_autodoc/           # Основной пакет
+│   ├── services/          # Сервисы для анализа и генерации
+│   │   ├── llm_agent.py   # LLM интеграция
+│   │   ├── github_parser.py # Парсинг репозиториев
+│   │   ├── doc_generator.py # Генерация документации
+│   │   └── ast_analyzer.py  # AST анализ кода
+│   ├── templates/         # Шаблоны документации
+│   └── cli.py            # CLI интерфейс
+├── .github/workflows/     # GitHub Actions
+├── tests/                # Тесты
+└── setup.py              # Конфигурация пакета
+```
+
+## 🛠️ Разработка
+
+### Локальная установка
+
+```bash
+git clone https://github.com/yourusername/llm_autodoc.git
+cd llm_autodoc
+python -m venv venv
+source venv/bin/activate  # или venv\Scripts\activate на Windows
+pip install -e .
+```
+
+### Запуск тестов
+
+```bash
+pytest tests/
+```
+
+### Создание собственных шаблонов
+
+1. Создайте директорию `templates` в вашем проекте
+2. Скопируйте базовый шаблон из `llm_autodoc/templates/readme_template.md`
+3. Модифицируйте под ваши нужды
+
+## 🤝 Участие в разработке
+
+1. Fork репозитория
+2. Создайте feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit изменения (`git commit -m 'Add some amazing feature'`)
+4. Push в branch (`git push origin feature/amazing-feature`)
+5. Создайте Pull Request
+
+## 📄 Лицензия
+
+Этот проект лицензирован под MIT License - см. файл [LICENSE](LICENSE) для деталей.
+
+## 🙏 Благодарности
+
+- [OpenRouter](https://openrouter.ai/) за предоставление доступа к LLM API
+- [GitHub](https://github.com/) за платформу и API
+- Всем участникам, которые помогают улучшать проект
+
+---
+
+*Документация сгенерирована автоматически с помощью LLM AutoDoc* 🤖
