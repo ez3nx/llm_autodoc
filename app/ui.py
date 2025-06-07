@@ -38,6 +38,7 @@ LAMODA_WHITE_TEXT = "#FFFFFF"
 LAMODA_BLACK_TEXT_ON_LIME = "#000000"
 LAMODA_DARK_GRAY_SUBTLE = "#1A1A1A"
 LAMODA_MID_GRAY_BORDER = "#333333"
+LAMODA_LIGHT_GRAY_TEXT = "#B8B8B8"
 
 st.set_page_config(
     page_title="AI AutoDoc Generator",
@@ -51,71 +52,71 @@ st.markdown(
 <style>
     /* ... (ваши стили остаются без изменений) ... */
     body {{
-        color: {LAMODA_WHITE_TEXT}; 
+        color: {LAMODA_WHITE_TEXT};
     }}
     .main .block-container {{
         background-color: {LAMODA_BLACK_BG};
         padding-top: 2rem;
         padding-bottom: 2rem;
-        color: {LAMODA_WHITE_TEXT}; 
+        color: {LAMODA_WHITE_TEXT};
     }}
-    .stButton button {{ 
+    .stButton button {{
         border-radius: 8px;
         font-weight: 600;
         border: none;
-        padding: 0.6rem 1.2rem; 
+        padding: 0.6rem 1.2rem;
     }}
-    .stButton button[data-testid="baseButton-secondary"], 
-    .stDownloadButton button {{ 
+    .stButton button[data-testid="baseButton-secondary"],
+    .stDownloadButton button {{
         background-color: {LAMODA_LIME_ACCENT};
-        color: {LAMODA_BLACK_TEXT_ON_LIME}; 
+        color: {LAMODA_BLACK_TEXT_ON_LIME};
     }}
     .stButton button[data-testid="baseButton-secondary"]:hover,
     .stDownloadButton button:hover {{
-        background-color: #B8E400; 
+        background-color: #B8E400;
         color: {LAMODA_BLACK_TEXT_ON_LIME};
     }}
-    .stTextInput input, 
+    .stTextInput input,
     .stSelectbox div[data-baseweb="select"] > div,
     .stTextArea textarea {{
-        background-color: {LAMODA_DARK_GRAY_SUBTLE}; 
-        color: {LAMODA_WHITE_TEXT};          
-        border: 1px solid {LAMODA_MID_GRAY_BORDER};   
+        background-color: {LAMODA_DARK_GRAY_SUBTLE};
+        color: {LAMODA_WHITE_TEXT};
+        border: 1px solid {LAMODA_MID_GRAY_BORDER};
         border-radius: 8px;
     }}
     .stTextInput input:focus,
     .stTextArea textarea:focus {{
-        border-color: {LAMODA_LIME_ACCENT}; 
-        box-shadow: 0 0 0 0.1rem {LAMODA_LIME_ACCENT}40; 
+        border-color: {LAMODA_LIME_ACCENT};
+        box-shadow: 0 0 0 0.1rem {LAMODA_LIME_ACCENT}40;
     }}
     .stTextInput ::placeholder,
     .stTextArea ::placeholder {{
-        color: #888888; 
+        color: #888888;
     }}
-    .sidebar .sidebar-content {{ 
-        background-color: {LAMODA_BLACK_BG}; 
+    .sidebar .sidebar-content {{
+        background-color: {LAMODA_BLACK_BG};
         padding: 2rem 1.5rem;
     }}
-    div[data-testid="stSidebarNavItems"] {{ 
+    div[data-testid="stSidebarNavItems"] {{
         padding-top: 1rem;
     }}
     .sidebar .sidebar-content h1,
     .sidebar .sidebar-content h2,
     .sidebar .sidebar-content h3,
     .sidebar .sidebar-content p,
-    .sidebar .sidebar-content label {{ 
+    .sidebar .sidebar-content label {{
         color: {LAMODA_WHITE_TEXT} !important;
     }}
     h1, h2, h3, h4, h5, h6 {{
-        color: {LAMODA_WHITE_TEXT}; 
+        color: {LAMODA_WHITE_TEXT};
         font-weight: 600;
     }}
     .lamoda-lime-text {{
         color: {LAMODA_LIME_ACCENT};
     }}
     .readme-container {{
-        background-color: {LAMODA_DARK_GRAY_SUBTLE}; 
-        color: {LAMODA_WHITE_TEXT};          
+        background-color: {LAMODA_DARK_GRAY_SUBTLE};
+        color: {LAMODA_WHITE_TEXT};
         padding: 1.5rem;
         border-radius: 8px;
         border: 1px solid {LAMODA_MID_GRAY_BORDER};
@@ -126,29 +127,29 @@ st.markdown(
     .readme-container h1, .readme-container h2, .readme-container h3 {{
         margin-top: 1em;
         margin-bottom: 0.5em;
-        color: {LAMODA_LIME_ACCENT}; 
+        color: {LAMODA_LIME_ACCENT};
     }}
     .readme-container p {{
         line-height: 1.6;
         color: {LAMODA_WHITE_TEXT};
     }}
-    .readme-container code {{ 
-        background-color: {LAMODA_MID_GRAY_BORDER}; 
-        color: {LAMODA_LIME_ACCENT}; 
+    .readme-container code {{
+        background-color: {LAMODA_MID_GRAY_BORDER};
+        color: {LAMODA_LIME_ACCENT};
         padding: 0.2em 0.4em;
         border-radius: 4px;
         font-size: 0.9em;
     }}
-    .readme-container pre {{ 
-        background-color: {LAMODA_BLACK_BG}; 
+    .readme-container pre {{
+        background-color: {LAMODA_BLACK_BG};
         border: 1px solid {LAMODA_MID_GRAY_BORDER};
         padding: 1em;
         border-radius: 6px;
         overflow-x: auto;
     }}
-    .readme-container pre code {{ 
-        background-color: transparent !important; 
-        color: {LAMODA_WHITE_TEXT}; 
+    .readme-container pre code {{
+        background-color: transparent !important;
+        color: {LAMODA_WHITE_TEXT};
         padding: 0;
     }}
     .logo-text-la {{
@@ -156,7 +157,7 @@ st.markdown(
     }}
     .logo-text-tech {{
         color: {LAMODA_LIME_ACCENT};
-        font-weight: 700; 
+        font-weight: 700;
     }}
 </style>
 """,
@@ -611,13 +612,13 @@ elif (
     st.markdown(
         f"""
     #### 🚀 Доступные функции:
-    
+
     **✨ Сгенерировать README** - создание нового README файла с нуля:
     1.  Загрузка файлов из вашего репозитория.
     2.  Анализ структуры кода (AST).
     3.  Генерация описаний и структуры документации с помощью LLM.
     4.  Готовый <span class="lamoda-lime-text">`README.md`</span> для вас!
-    
+
     **🔄 Обновить README** - актуализация существующего README:
     1.  Проверка наличия README в репозитории.
     2.  Анализ последних merged Pull Request'ов.
@@ -631,8 +632,13 @@ elif (
 st.markdown("---")
 st.markdown(
     f"""
-<div style="text-align: center; padding: 1rem 0; font-size: 0.9rem; color: #777777;">
-    Разработано с <span style="color: {LAMODA_LIME_ACCENT};">❤️</span> на хакатоне | <span class="logo-text-la">la</span><span class="logo-text-tech">tech</span> Inspired
+<div style="text-align: center; padding: 2rem 0; background: linear-gradient(135deg, {LAMODA_DARK_GRAY_SUBTLE} 0%, rgba(26,26,26,0.5) 100%); border-radius: 12px; margin-top: 2rem;">
+    <div style="font-size: 1rem; color: {LAMODA_LIGHT_GRAY_TEXT}; margin-bottom: 0.5rem;">
+        Разработано командой MISISxHSExITMO на хакатоне Orion Soft
+    </div>
+    <div style="font-size: 1.2rem; font-weight: 600;">
+        <span class="logo-text-la">lamoda</span><span class="logo-text-tech">tech</span> <span style="color: {LAMODA_LIGHT_GRAY_TEXT};"></span>
+    </div>
 </div>
 """,
     unsafe_allow_html=True,
