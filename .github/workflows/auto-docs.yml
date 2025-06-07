@@ -27,6 +27,7 @@ jobs:
       with:
         fetch-depth: 0
         token: ${{ secrets.GITHUB_TOKEN }}
+        ref: ${{ github.head_ref }}
     
     - name: Set up Python
       uses: actions/setup-python@v4
@@ -103,14 +104,25 @@ jobs:
         git config --local user.email "action@github.com"
         git config --local user.name "GitHub Action"
         
+        # Ensure we're on the correct branch
+        BRANCH_NAME="${{ github.head_ref }}"
+        echo "Current branch: $(git branch --show-current)"
+        echo "Target branch: $BRANCH_NAME"
+        
         git add README.md
         git commit -m "docs: auto-update README.md via LLM AutoDoc
-        
+
         - Generated using LLM AutoDoc
         - Updated based on current codebase analysis
         - Triggered by PR #${{ github.event.number }}"
         
-        git push
+        # Push changes back to the PR branch
+        if [ -n "$BRANCH_NAME" ]; then
+          git push origin HEAD:$BRANCH_NAME
+        else
+          echo "⚠️ No branch name found, using default push"
+          git push
+        fi
     
     - name: Comment on PR
       if: env.DOCS_UPDATED == 'true' && github.event_name == 'pull_request'
