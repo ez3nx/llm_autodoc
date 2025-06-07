@@ -1,7 +1,7 @@
 # app/services/llm_agent.py
 import logging
 import os
-from typing import Any, Dict, Literal, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 import requests
 from dotenv import load_dotenv
@@ -489,3 +489,204 @@ class LlmAgent:
                 f"[LlmAgent] README успешно сгенерирован моделью {actual_model_name}."
             )
         return readme_markdown
+
+    def update_readme_content(
+        self,
+        existing_readme: str,
+        recent_prs: List[Dict[str, Any]],
+        ast_data: Dict[str, Any],
+        files_content: Dict[str, str],
+        style: str = "summary",
+        model_key: Optional[SUPPORTED_MODELS] = None,
+    ) -> str:
+        """
+        Update existing README content based on recent merged PRs and current project state.
+
+        Args:
+            existing_readme: Current README content
+            recent_prs: List of recent merged pull requests
+            ast_data: AST analysis data
+            files_content: Current repository files content
+            style: Documentation style ("summary" or "detailed")
+            model_key: LLM model to use
+
+        Returns:
+            Updated README content as markdown string
+        """
+        if not self.openrouter_api_key:
+            print("[LlmAgent] OpenRouter API ключ не настроен. Возврат заглушки.")
+            return "# Ошибка\n\nAPI ключ для LLM не настроен. Пожалуйста, проверьте конфигурацию."
+
+        current_model_key = model_key or self.default_model_key
+        actual_model_name = self.DEFAULT_MODEL_MAPPING.get(current_model_key)
+
+        if not actual_model_name:
+            print(
+                f"[LlmAgent] Неизвестный ключ модели: {current_model_key}. Используется модель по умолчанию."
+            )
+            actual_model_name = self.DEFAULT_MODEL_MAPPING.get(self.default_model_key)
+            if not actual_model_name:
+                return "# Ошибка\n\nНе удалось определить модель LLM для использования."
+
+        print(
+            f"[LlmAgent] Обновление README. Стиль: {style}. Модель: {actual_model_name}"
+        )
+
+        # Log README update start
+        llm_logger.info(f"🔄 Starting README update")
+        llm_logger.info(f"🎨 Style: {style}")
+        llm_logger.info(f"🤖 Model: {actual_model_name}")
+        llm_logger.info(f"📋 Recent PRs to analyze: {len(recent_prs)}")
+        llm_logger.info(f"📁 Files to analyze: {len(files_content)}")
+
+        # Construct PR summary
+        pr_summary = "Последние изменения в репозитории (merged PR):\n"
+        if recent_prs:
+            for pr in recent_prs[:5]:  # Limit to 5 most recent PRs
+                pr_summary += f"\n**PR #{pr['number']}: {pr['title']}**\n"
+                pr_summary += f"- Автор: {pr['user']}\n"
+                pr_summary += f"- Дата слияния: {pr['merged_at']}\n"
+                if pr["body"]:
+                    # Limit PR body length
+                    body_preview = (
+                        pr["body"][:300] + "..."
+                        if len(pr["body"]) > 300
+                        else pr["body"]
+                    )
+                    pr_summary += f"- Описание: {body_preview}\n"
+
+                if pr["files_changed"]:
+                    pr_summary += f"- Измененные файлы ({len(pr['files_changed'])}):\n"
+                    for file_info in pr["files_changed"][
+                        :10
+                    ]:  # Limit to 10 files per PR
+                        pr_summary += f"  - {file_info['filename']} ({file_info['status']}, +{file_info['additions']}/-{file_info['deletions']})\n"
+        else:
+            pr_summary += "Нет недавних merged PR для анализа.\n"
+
+        # Get current project structure summary
+        project_structure_summary = "Текущая структура проекта:\n"
+        if ast_data.get("file_details"):
+            for filepath, details in list(ast_data["file_details"].items())[:10]:
+                project_structure_summary += (
+                    f"- Файл `{filepath}` ({details.get('type', 'unknown')}):\n"
+                )
+                if "functions" in details and details["functions"]:
+                    func_names = [f"`{f['name']}()`" for f in details["functions"][:3]]
+                    project_structure_summary += (
+                        f"  - Функции: {', '.join(func_names)}\n"
+                    )
+                if "classes" in details and details["classes"]:
+                    class_names = [f"`{c['name']}`" for c in details["classes"][:2]]
+                    project_structure_summary += (
+                        f"  - Классы: {', '.join(class_names)}\n"
+                    )
+
+        # Construct update prompt
+        prompt = f"""
+Ты — опытный технический писатель и разработчик, специализирующийся на поддержании актуальной документации для программных проектов.
+
+Твоя задача — проанализировать существующий README.md файл и обновить его на основе последних изменений в проекте, если это необходимо.
+
+**ВАЖНО:** Обновляй документацию ТОЛЬКО если есть существенные изменения, которые влияют на:
+- Функциональность проекта
+- Способы установки или запуска
+- Архитектуру или структуру проекта
+- Новые возможности или компоненты
+- Изменения в API или интерфейсах
+
+Если изменения незначительные (исправления багов, рефакторинг без изменения функциональности, обновления зависимостей), то верни существующий README без изменений.
+
+**Существующий README.md:**
+```markdown
+{existing_readme}
+```
+
+**Анализ последних изменений:**
+{pr_summary}
+
+**Текущее состояние проекта:**
+{project_structure_summary}
+
+**Инструкции по обновлению:**
+1. **Язык:** Русский
+2. **Формат:** Строго Markdown
+3. **Подход:** Сохрани структуру и стиль существующего README
+4. **Обновления:** Внеси изменения только там, где это действительно необходимо
+5. **Качество:** Поддерживай профессиональный тон и ясность изложения
+
+**Что нужно проверить и обновить при необходимости:**
+- Описание проекта (если добавлены новые основные функции)
+- Список возможностей (если добавлены новые фичи)
+- Инструкции по установке (если изменились зависимости или процесс установки)
+- Примеры использования (если изменился API или добавлены новые способы использования)
+- Структура проекта (если добавлены новые важные директории или файлы)
+- Технологический стек (если добавлены новые технологии)
+
+**Если обновления не требуются, верни точно такой же README без изменений.**
+
+**Если обновления необходимы, верни обновленную версию README.md:**
+"""
+
+        # Save prompt to file for debugging
+        import datetime
+
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        prompt_filename = f"logs/llm_update_prompt_{timestamp}.txt"
+
+        try:
+            import os
+
+            os.makedirs("logs", exist_ok=True)
+            with open(prompt_filename, "w", encoding="utf-8") as f:
+                f.write("=" * 80 + "\n")
+                f.write(
+                    f"LLM UPDATE PROMPT - {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
+                )
+                f.write("=" * 80 + "\n\n")
+                f.write(f"Model: {actual_model_name}\n")
+                f.write(f"Style: {style}\n")
+                f.write(f"Recent PRs: {len(recent_prs)}\n")
+                f.write(f"Files analyzed: {len(files_content)}\n")
+                f.write(f"Prompt length: {len(prompt)} characters\n")
+                f.write("\n" + "=" * 80 + "\n")
+                f.write("FULL PROMPT:\n")
+                f.write("=" * 80 + "\n\n")
+                f.write(prompt)
+                f.write("\n\n" + "=" * 80 + "\n")
+                f.write("END OF PROMPT\n")
+                f.write("=" * 80 + "\n")
+
+            llm_logger.info(f"💾 Update prompt saved to file: {prompt_filename}")
+        except Exception as e:
+            llm_logger.warning(f"⚠️ Failed to save update prompt to file: {e}")
+
+        updated_readme = _ask_openrouter_llm(
+            prompt=prompt,
+            model_name=actual_model_name,
+            api_key=self.openrouter_api_key,
+        )
+
+        # Save LLM response to the same file
+        try:
+            with open(prompt_filename, "a", encoding="utf-8") as f:
+                f.write("\n\n" + "=" * 80 + "\n")
+                f.write("LLM RESPONSE:\n")
+                f.write("=" * 80 + "\n\n")
+                f.write(updated_readme)
+                f.write("\n\n" + "=" * 80 + "\n")
+                f.write("END OF RESPONSE\n")
+                f.write("=" * 80 + "\n")
+
+            llm_logger.info(
+                f"💾 LLM update response appended to file: {prompt_filename}"
+            )
+        except Exception as e:
+            llm_logger.warning(f"⚠️ Failed to save LLM update response to file: {e}")
+
+        if "⚠️ Ошибка" in updated_readme:
+            print(f"[LlmAgent] Получена ошибка от LLM при обновлении: {updated_readme}")
+        else:
+            print(f"[LlmAgent] README успешно обновлен моделью {actual_model_name}.")
+
+        return updated_readme

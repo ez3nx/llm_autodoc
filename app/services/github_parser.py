@@ -383,3 +383,149 @@ class GithubParser:
             print(f"Произошла непредвиденная ошибка: {e}")
             traceback.print_exc()  # Для отладки
             return {}
+
+    def check_readme_exists(self, repo_url: str, branch: Optional[str] = None) -> bool:
+        """
+        Check if README file exists in the repository.
+        
+        Args:
+            repo_url: Full GitHub repository URL
+            branch: Branch to check. If None, uses default branch
+            
+        Returns:
+            True if README exists, False otherwise
+        """
+        repo_full_name = self._extract_repo_name_from_url(repo_url)
+        if not repo_full_name:
+            print(f"Error: Invalid repository URL: {repo_url}")
+            return False
+            
+        try:
+            repo = self.github_client.get_repo(repo_full_name)
+            
+            if not branch:
+                branch = repo.default_branch
+                
+            # Common README file names
+            readme_names = ["README.md", "readme.md", "README.MD", "README", "readme", "Readme.md"]
+            
+            for readme_name in readme_names:
+                try:
+                    repo.get_contents(readme_name, ref=branch)
+                    github_logger.info(f"✅ Found README file: {readme_name}")
+                    return True
+                except UnknownObjectException:
+                    continue
+                    
+            github_logger.info("❌ No README file found in repository")
+            return False
+            
+        except Exception as e:
+            github_logger.error(f"❌ Error checking README existence: {e}")
+            return False
+    
+    def get_recent_merged_prs(self, repo_url: str, limit: int = 10) -> List[Dict[str, Any]]:
+        """
+        Get recent merged pull requests from the repository.
+        
+        Args:
+            repo_url: Full GitHub repository URL
+            limit: Maximum number of PRs to retrieve
+            
+        Returns:
+            List of dictionaries containing PR information
+        """
+        repo_full_name = self._extract_repo_name_from_url(repo_url)
+        if not repo_full_name:
+            print(f"Error: Invalid repository URL: {repo_url}")
+            return []
+            
+        try:
+            repo = self.github_client.get_repo(repo_full_name)
+            
+            # Get merged PRs (state='closed' and merged=True)
+            pulls = repo.get_pulls(state='closed', sort='updated', direction='desc')
+            
+            merged_prs = []
+            count = 0
+            
+            for pr in pulls:
+                if count >= limit:
+                    break
+                    
+                if pr.merged:
+                    pr_info = {
+                        'number': pr.number,
+                        'title': pr.title,
+                        'body': pr.body or '',
+                        'merged_at': pr.merged_at.isoformat() if pr.merged_at else None,
+                        'user': pr.user.login if pr.user else 'Unknown',
+                        'url': pr.html_url,
+                        'files_changed': []
+                    }
+                    
+                    # Get files changed in this PR
+                    try:
+                        files = pr.get_files()
+                        for file in files:
+                            pr_info['files_changed'].append({
+                                'filename': file.filename,
+                                'status': file.status,  # added, modified, removed
+                                'additions': file.additions,
+                                'deletions': file.deletions,
+                                'changes': file.changes
+                            })
+                    except Exception as e:
+                        github_logger.warning(f"⚠️ Could not get files for PR #{pr.number}: {e}")
+                    
+                    merged_prs.append(pr_info)
+                    count += 1
+                    
+            github_logger.info(f"📋 Retrieved {len(merged_prs)} recent merged PRs")
+            return merged_prs
+            
+        except Exception as e:
+            github_logger.error(f"❌ Error getting recent PRs: {e}")
+            return []
+
+    def get_existing_readme_content(self, repo_url: str, branch: Optional[str] = None) -> Optional[str]:
+        """
+        Get the content of existing README file from the repository.
+        
+        Args:
+            repo_url: Full GitHub repository URL
+            branch: Branch to check. If None, uses default branch
+            
+        Returns:
+            README content as string, or None if not found
+        """
+        repo_full_name = self._extract_repo_name_from_url(repo_url)
+        if not repo_full_name:
+            print(f"Error: Invalid repository URL: {repo_url}")
+            return None
+            
+        try:
+            repo = self.github_client.get_repo(repo_full_name)
+            
+            if not branch:
+                branch = repo.default_branch
+                
+            # Common README file names
+            readme_names = ["README.md", "readme.md", "README.MD", "README", "readme", "Readme.md"]
+            
+            for readme_name in readme_names:
+                try:
+                    readme_file = repo.get_contents(readme_name, ref=branch)
+                    if hasattr(readme_file, 'decoded_content') and readme_file.decoded_content:
+                        content = readme_file.decoded_content.decode('utf-8', errors='ignore')
+                        github_logger.info(f"✅ Retrieved README content from: {readme_name}")
+                        return content
+                except UnknownObjectException:
+                    continue
+                    
+            github_logger.info("❌ No README file found in repository")
+            return None
+            
+        except Exception as e:
+            github_logger.error(f"❌ Error getting README content: {e}")
+            return None
