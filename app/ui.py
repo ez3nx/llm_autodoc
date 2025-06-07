@@ -1,6 +1,11 @@
 # app/ui.py
 import os
 import sys
+import matplotlib.pyplot as plt
+import pandas as pd
+import plotly.express as px
+import networkx as nx
+from matplotlib.style.core import available
 
 # Добавляем корневую директорию проекта (на один уровень выше 'app') в sys.path
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -240,20 +245,20 @@ with st.sidebar:
         help="Введите полный URL публичного GitHub репозитория.",
     )
 
-    # Опционально: выбор модели LLM
-    # доступные_модели = list(LlmAgent.DEFAULT_MODEL_MAPPING.keys())
-    # выбранная_модель_ключ = st.selectbox(
-    #     "🤖 Выберите модель LLM",
-    #     options=доступные_модели,
-    #     index=доступные_модели.index(llm_agent.default_model_key) # Устанавливаем дефолтное значение из агента
-    # )
+    # выбор модели LLM
+    available_models = list(LlmAgent.DEFAULT_MODEL_MAPPING.keys())
+    selected_model_key = st.selectbox(
+        "🤖 Выберите модель LLM",
+        options=available_models,
+        index=available_models.index(llm_agent.default_model_key) # Устанавливаем дефолтное значение из агента
+    )
 
-    # Опционально: выбор стиля README
-    # readme_style = st.selectbox(
-    #     "🎨 Стиль README",
-    #     options=["summary", "detailed"],
-    #     index=0 # "summary" по умолчанию
-    # )
+    # выбор стиля README
+    readme_style = st.selectbox(
+        "🎨 Стиль README",
+        options=["summary", "detailed"],
+        index=0 # "summary" по умолчанию
+    )
 
     if st.button("✨ Сгенерировать README", type="secondary", use_container_width=True):
         if repo_url:
@@ -290,10 +295,11 @@ with st.sidebar:
                     spinner_placeholder.text("3/4: Генерация описаний с помощью LLM...")
                     # Передаем выбранную модель и стиль, если добавили выбор в UI, иначе используются дефолтные
                     llm_output = llm_agent.generate_readme_content(
-                        ast_data,
+                        ast_data, 
                         files_content,
-                        # style=readme_style, # если есть выбор стиля
-                        # model_key=выбранная_модель_ключ # если есть выбор модели
+                        model_key = selected_model_key,
+                        style = readme_style # выбор стиля
+
                     )
 
                     if llm_output.startswith("⚠️ Ошибка") or llm_output.startswith(
@@ -355,9 +361,66 @@ if st.session_state.generated_readme:
         use_container_width=True,
         type="secondary",  # Это сделает кнопку акцентной по вашим стилям
     )
-elif (
-    not st.session_state.error_message
-):  # Показываем приветствие, только если нет ошибки и нет README
+
+    # 📊 Дополнительная аналитика по проекту
+    st.markdown("---")
+    st.markdown("## 📊 Аналитика и визуализация проекта", unsafe_allow_html=True)
+
+
+    # 1. Распределение типов файлов
+    st.markdown(f"""
+    <div style="background-color:{LAMODA_DARK_GRAY_SUBTLE}; padding: 1.5rem; border-radius: 12px; border: 1px solid {LAMODA_MID_GRAY_BORDER}; margin-bottom: 2rem;">
+    <h4 style="color: {LAMODA_LIME_ACCENT}; margin-bottom: 1rem;">📁 Распределение типов файлов в репозитории</h4>
+    """, unsafe_allow_html=True)
+
+    # --- 1. Типы файлов
+    file_extensions = [file.split(".")[-1] for file in files_content.keys() if "." in file]
+    ext_counts = pd.Series(file_extensions).value_counts()
+    fig1, ax1 = plt.subplots()
+    ax1.pie(ext_counts.values, labels=ext_counts.index, autopct='%1.1f%%', startangle=140)
+    ax1.axis("equal")
+    st.pyplot(fig1)
+
+    st.markdown("</div>", unsafe_allow_html=True)
+
+    # --- 2. Структура проекта (treemap)
+    st.markdown(f"""
+    <div style="background-color:{LAMODA_DARK_GRAY_SUBTLE}; padding: 1.5rem; border-radius: 12px; border: 1px solid {LAMODA_MID_GRAY_BORDER}; margin-bottom: 2rem;">
+    <h4 style="color: {LAMODA_LIME_ACCENT}; margin-bottom: 1rem;">🧱 Структура проекта (по размерам файлов)</h4>
+    """, unsafe_allow_html=True)
+
+    tree_df = pd.DataFrame([
+        {"path": f, "size": len(content)} for f, content in files_content.items()
+    ])
+    fig2 = px.treemap(tree_df, path=["path"], values="size", title="Treemap", height=400)
+    st.plotly_chart(fig2, use_container_width=True)
+
+    st.markdown("</div>", unsafe_allow_html=True)
+
+    # --- 3. Пример диаграммы архитектуры (простая C4)
+    st.markdown(f"""
+    <div style="background-color:{LAMODA_DARK_GRAY_SUBTLE}; padding: 1.5rem; border-radius: 12px; border: 1px solid {LAMODA_MID_GRAY_BORDER};">
+    <h4 style="color: {LAMODA_LIME_ACCENT}; margin-bottom: 1rem;">🧠 Архитектура (C4-пример)</h4>
+    <p style="color: #AAAAAA;">Диаграмма компонентов приложения</p>
+    """, unsafe_allow_html=True)
+
+    G = nx.DiGraph()
+    G.add_edges_from([
+        ("👤 User", "🌐 API"),
+        ("🌐 API", "🔧 Service"),
+        ("🔧 Service", "💾 Repository"),
+        ("💾 Repository", "🗄️ Database"),
+    ])
+    fig3, ax3 = plt.subplots(figsize=(6, 4))
+    nx.draw(
+        G, with_labels=True, node_color="#CDFE00", edge_color="gray",
+        node_size=3000, font_size=10, font_weight="bold", ax=ax3
+    )
+    st.pyplot(fig3)
+
+    st.markdown("</div>", unsafe_allow_html=True)
+
+elif not st.session_state.error_message: # Показываем приветствие, только если нет ошибки и нет README
     st.info(
         "👋 Добро пожаловать! "
         "Введите URL GitHub репозитория в панели слева и нажмите 'Сгенерировать README'."

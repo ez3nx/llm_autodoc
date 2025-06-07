@@ -12,7 +12,10 @@ from github import (
     RateLimitExceededException,
     UnknownObjectException,
 )
-from dotenv import load_dotenv
+
+# Configure logging for GitHub parsing
+logging.basicConfig(level=logging.INFO)
+github_logger = logging.getLogger("github_parser")
 
 # Загрузка переменных окружения, если этот файл запускается отдельно (для тестирования)
 # В основном приложении Streamlit это обычно делается в главном файле ui.py
