@@ -2,21 +2,13 @@
 import logging
 import os
 from typing import Any, Dict, List, Literal, Optional
-
 import requests
 from dotenv import load_dotenv
+from pathlib import Path
 
 # Configure logging for LLM interactions
 logging.basicConfig(level=logging.INFO)
 llm_logger = logging.getLogger("llm_agent")
-
-# Загрузка переменных окружения, если файл запускается отдельно
-# В основном приложении Streamlit это обычно делается в ui.py
-# Этот блок if __name__ == "__main__": с load_dotenv был здесь,
-# но так как ui.py уже делает load_dotenv(), и этот файл теперь
-# будет использоваться только как модуль, явная загрузка здесь не нужна,
-# если только для независимого тестирования вне Streamlit-контекста,
-# но тестовый блок ниже мы удаляем.
 
 
 # --- Вспомогательные функции для вызова LLM ---
@@ -33,8 +25,6 @@ def _ask_openrouter_llm(
     headers = {
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
-        # "HTTP-Referer": "YOUR_SITE_URL", # Рекомендуется для OpenRouter
-        # "X-Title": "Your App Name",     # Рекомендуется для OpenRouter
     }
     payload = {
         "model": model_name,
@@ -44,7 +34,6 @@ def _ask_openrouter_llm(
     }
     url = "https://openrouter.ai/api/v1/chat/completions"
 
-    # Log LLM request details
     llm_logger.info(f"🤖 Making LLM request to OpenRouter")
     llm_logger.info(f"📋 Model: {model_name}")
     llm_logger.info(
@@ -60,7 +49,6 @@ def _ask_openrouter_llm(
         if "choices" in response_json and len(response_json["choices"]) > 0:
             content = response_json["choices"][0].get("message", {}).get("content")
             if content:
-                # Log successful response
                 llm_logger.info(f"✅ LLM response received successfully")
                 llm_logger.info(f"📊 Response length: {len(content)} characters")
                 llm_logger.info(
@@ -101,11 +89,7 @@ def _ask_openrouter_llm(
 
 # --- Класс LlmAgent ---
 class LlmAgent:
-    SUPPORTED_MODELS = Literal[
-        "claude-sonnet",
-        "gemini-flash",
-        "gpt-4o-mini"
-    ]
+    SUPPORTED_MODELS = Literal["claude-sonnet", "gemini-flash", "gpt-4o-mini"]
     DEFAULT_MODEL_MAPPING = {
         "claude-sonnet": "anthropic/claude-3-sonnet",
         "gemini-flash": "google/gemini-flash-1.5",
@@ -278,7 +262,6 @@ class LlmAgent:
         for filepath, content in sorted_files:
             # Limit content length to avoid token limits
             max_content_length = 2000 if len(files_content) > 10 else 4000
-
             if len(content) > max_content_length:
                 truncated_content = (
                     content[:max_content_length] + "\n... (файл обрезан)"
@@ -324,8 +307,11 @@ class LlmAgent:
 
 **Анализ структуры кода (из AST):**
 {project_structure_summary}
+
 {config_files_info}
+
 {project_structure_info}
+
 {contextual_code_snippets}
 
 **Требования к README.md:**
@@ -395,7 +381,6 @@ class LlmAgent:
 
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
         prompt_filename = f"logs/llm_prompt_{timestamp}.txt"
-
         try:
             import os
 
@@ -417,7 +402,6 @@ class LlmAgent:
                 f.write("\n\n" + "=" * 80 + "\n")
                 f.write("END OF PROMPT\n")
                 f.write("=" * 80 + "\n")
-
             llm_logger.info(f"💾 Prompt saved to file: {prompt_filename}")
         except Exception as e:
             llm_logger.warning(f"⚠️ Failed to save prompt to file: {e}")
@@ -465,6 +449,7 @@ class LlmAgent:
             prompt=prompt_text,
             model_name=actual_model_name,
             api_key=self.openrouter_api_key,
+            max_tokens=6144,
         )
 
         # Save LLM response to the same file
@@ -477,7 +462,6 @@ class LlmAgent:
                 f.write("\n\n" + "=" * 80 + "\n")
                 f.write("END OF RESPONSE\n")
                 f.write("=" * 80 + "\n")
-
             llm_logger.info(f"💾 LLM response appended to file: {prompt_filename}")
         except Exception as e:
             llm_logger.warning(f"⚠️ Failed to save LLM response to file: {e}")
@@ -488,7 +472,457 @@ class LlmAgent:
             print(
                 f"[LlmAgent] README успешно сгенерирован моделью {actual_model_name}."
             )
+
         return readme_markdown
+
+    def generate_folder_documentation(
+        self,
+        folder_name: str,
+        ast_data: Dict[str, Any],
+        files_content: Dict[str, str],
+        model_key: Optional[SUPPORTED_MODELS] = None,
+    ) -> str:
+        """
+        Generate documentation for a specific folder/module.
+
+        Args:
+            folder_name: Name of the folder to document
+            ast_data: AST analysis data for files in this folder
+            files_content: Content of files in this folder
+            model_key: LLM model to use
+
+        Returns:
+            Markdown documentation for the folder
+        """
+        if not self.openrouter_api_key:
+            print("[LlmAgent] OpenRouter API ключ не настроен. Возврат заглушки.")
+            return "# Ошибка\n\nAPI ключ для LLM не настроен."
+
+        current_model_key = model_key or self.default_model_key
+        actual_model_name = self.DEFAULT_MODEL_MAPPING.get(current_model_key)
+
+        if not actual_model_name:
+            print(f"[LlmAgent] Неизвестный ключ модели: {current_model_key}.")
+            actual_model_name = self.DEFAULT_MODEL_MAPPING.get(self.default_model_key)
+            if not actual_model_name:
+                return "# Ошибка\n\nНе удалось определить модель LLM."
+
+        llm_logger.info(f"📁 Generating documentation for folder: {folder_name}")
+        llm_logger.info(f"🤖 Model: {actual_model_name}")
+        llm_logger.info(f"📄 Files in folder: {len(files_content)}")
+
+        # Analyze folder structure
+        folder_structure = "Структура папки:\n"
+        for filepath in sorted(files_content.keys()):
+            relative_path = (
+                filepath.replace(f"{folder_name}/", "")
+                if folder_name != "root"
+                else filepath
+            )
+            folder_structure += f"- `{relative_path}`\n"
+
+        # Analyze folder components
+        folder_components = "Компоненты папки:\n"
+        if ast_data.get("file_details"):
+            for filepath, details in ast_data["file_details"].items():
+                folder_components += (
+                    f"\n**{filepath}** ({details.get('type', 'unknown')}):\n"
+                )
+
+                if "classes" in details and details["classes"]:
+                    folder_components += "- Классы:\n"
+                    for cls in details["classes"][:5]:  # Limit to 5 classes
+                        folder_components += f"  - `{cls['name']}`: {cls.get('docstring', 'Описание отсутствует')[:100]}...\n"
+
+                if "functions" in details and details["functions"]:
+                    folder_components += "- Функции:\n"
+                    for func in details["functions"][:5]:  # Limit to 5 functions
+                        folder_components += f"  - `{func['name']}()`: {func.get('docstring', 'Описание отсутствует')[:100]}...\n"
+
+        # Include file contents (truncated)
+        files_content_summary = "\n\nСодержимое файлов:\n"
+        for filepath, content in files_content.items():
+            max_length = 1500  # Smaller limit for folder docs
+            truncated_content = (
+                content[:max_length] + "..." if len(content) > max_length else content
+            )
+            files_content_summary += (
+                f"\n--- {filepath} ---\n```\n{truncated_content}\n```\n"
+            )
+
+        prompt = f"""
+Ты — опытный технический писатель, специализирующийся на создании документации для модулей и компонентов программных проектов.
+
+Твоя задача — создать детальную документацию для папки/модуля "{folder_name}" на основе анализа его содержимого.
+
+**Информация о папке "{folder_name}":**
+
+{folder_structure}
+
+{folder_components}
+
+{files_content_summary}
+
+**Требования к документации:**
+1. **Формат:** Строго Markdown
+2. **Язык:** Русский
+3. **Структура документа:**
+   - # {folder_name.title()} (заголовок папки)
+   - ## Описание (краткое описание назначения папки/модуля)
+   - ## Компоненты (список и описание основных файлов и их функций)
+   - ## Основные классы (если есть - описание ключевых классов)
+   - ## Основные функции (если есть - описание ключевых функций)
+   - ## Зависимости (если очевидны из кода)
+   - ## Примеры использования (если можно определить из кода)
+
+**Качество:**
+- Будь конкретным и техническим
+- Избегай общих фраз
+- Сосредоточься на том, что этот модуль делает и как его использовать
+- Используй информацию из анализа кода
+
+**Создай документацию для папки "{folder_name}":**
+"""
+
+        # Save prompt for debugging
+        import datetime
+
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        prompt_filename = f"logs/llm_folder_prompt_{folder_name}_{timestamp}.txt"
+        try:
+            os.makedirs("logs", exist_ok=True)
+            with open(prompt_filename, "w", encoding="utf-8") as f:
+                f.write(f"FOLDER DOCUMENTATION PROMPT - {folder_name}\n")
+                f.write("=" * 80 + "\n\n")
+                f.write(prompt)
+            llm_logger.info(f"💾 Folder prompt saved: {prompt_filename}")
+        except Exception as e:
+            llm_logger.warning(f"⚠️ Failed to save folder prompt: {e}")
+
+        folder_doc = _ask_openrouter_llm(
+            prompt=prompt,
+            model_name=actual_model_name,
+            api_key=self.openrouter_api_key,
+            max_tokens=4096,
+        )
+
+        # Save response
+        try:
+            with open(prompt_filename, "a", encoding="utf-8") as f:
+                f.write("\n\n" + "=" * 80 + "\n")
+                f.write("LLM RESPONSE:\n")
+                f.write("=" * 80 + "\n\n")
+                f.write(folder_doc)
+            llm_logger.info(f"💾 Folder response saved: {prompt_filename}")
+        except Exception as e:
+            llm_logger.warning(f"⚠️ Failed to save folder response: {e}")
+
+        if "⚠️ Ошибка" in folder_doc:
+            print(
+                f"[LlmAgent] Ошибка при генерации документации папки {folder_name}: {folder_doc}"
+            )
+        else:
+            print(
+                f"[LlmAgent] Документация для папки {folder_name} успешно сгенерирована."
+            )
+
+        return folder_doc
+
+    def generate_main_docs_readme(
+        self,
+        folders: List[str],
+        ast_data: Dict[str, Any],
+        model_key: Optional[SUPPORTED_MODELS] = None,
+    ) -> str:
+        """
+        Generate main README.md for the docs folder that links to all folder documentation.
+
+        Args:
+            folders: List of folder names that have documentation
+            ast_data: AST analysis data for the entire project
+            model_key: LLM model to use
+
+        Returns:
+            Main README.md content for docs folder
+        """
+        if not self.openrouter_api_key:
+            print("[LlmAgent] OpenRouter API ключ не настроен. Возврат заглушки.")
+            return "# Ошибка\n\nAPI ключ для LLM не настроен."
+
+        current_model_key = model_key or self.default_model_key
+        actual_model_name = self.DEFAULT_MODEL_MAPPING.get(current_model_key)
+
+        if not actual_model_name:
+            actual_model_name = self.DEFAULT_MODEL_MAPPING.get(self.default_model_key)
+            if not actual_model_name:
+                return "# Ошибка\n\nНе удалось определить модель LLM."
+        llm_logger.info(f"📚 Generating main docs README")
+        llm_logger.info(f"🤖 Model: {actual_model_name}")
+        llm_logger.info(f"📁 Folders to document: {len(folders)}")
+
+        # Create folder list with descriptions
+        folders_list = "Структура документации:\n"
+        for folder in sorted(folders):
+            if folder == "root":
+                folders_list += (
+                    f"- [`{folder}.md`](./{folder}.md) - Файлы в корне проекта\n"
+                )
+            else:
+                folders_list += f"- [`{folder}.md`](./{folder}.md) - Модуль {folder}\n"
+
+        # Project overview from AST
+        project_overview = "Обзор проекта:\n"
+        if ast_data.get("repository_overview"):
+            project_overview += ast_data["repository_overview"] + "\n"
+
+        if ast_data.get("file_details"):
+            total_files = len(ast_data["file_details"])
+            total_classes = sum(
+                len(details.get("classes", []))
+                for details in ast_data["file_details"].values()
+            )
+            total_functions = sum(
+                len(details.get("functions", []))
+                for details in ast_data["file_details"].values()
+            )
+
+            project_overview += f"\n**Статистика проекта:**\n"
+            project_overview += f"- Всего файлов: {total_files}\n"
+            project_overview += f"- Всего классов: {total_classes}\n"
+            project_overview += f"- Всего функций: {total_functions}\n"
+
+        prompt = f"""
+Ты — опытный технический писатель, создающий главную страницу документации для проекта.
+
+Твоя задача — создать главный README.md файл для папки docs, который будет служить навигацией по всей документации проекта.
+
+**Информация о проекте:**
+{project_overview}
+
+**Доступная документация:**
+{folders_list}
+
+**Требования к главному README.md:**
+1. **Формат:** Строго Markdown
+2. **Язык:** Русский
+3. **Структура документа:**
+   - # Документация проекта
+   - ## О проекте (краткое описание проекта и его назначения)
+   - ## Структура документации (навигация по модулям с описанием каждого)
+   - ## Быстрый старт (как начать работу с проектом)
+   - ## Архитектура (общая схема проекта и взаимодействие модулей)
+
+**Особенности:**
+- Сделай документацию дружелюбной для новых разработчиков
+- Включи ссылки на соответствующие .md файлы модулей
+- Объясни общую архитектуру и принципы организации кода
+- Добавь рекомендации по изучению проекта (с чего начать)
+
+**Создай главную страницу документации:**
+"""
+
+        # Save prompt for debugging
+        import datetime
+
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        prompt_filename = f"logs/llm_main_docs_prompt_{timestamp}.txt"
+        try:
+            os.makedirs("logs", exist_ok=True)
+            with open(prompt_filename, "w", encoding="utf-8") as f:
+                f.write("MAIN DOCS README PROMPT\n")
+                f.write("=" * 80 + "\n\n")
+                f.write(prompt)
+            llm_logger.info(f"💾 Main docs prompt saved: {prompt_filename}")
+        except Exception as e:
+            llm_logger.warning(f"⚠️ Failed to save main docs prompt: {e}")
+
+        main_readme = _ask_openrouter_llm(
+            prompt=prompt,
+            model_name=actual_model_name,
+            api_key=self.openrouter_api_key,
+            max_tokens=5048,
+        )
+
+        # Save response
+        try:
+            with open(prompt_filename, "a", encoding="utf-8") as f:
+                f.write("\n\n" + "=" * 80 + "\n")
+                f.write("LLM RESPONSE:\n")
+                f.write("=" * 80 + "\n\n")
+                f.write(main_readme)
+            llm_logger.info(f"💾 Main docs response saved: {prompt_filename}")
+        except Exception as e:
+            llm_logger.warning(f"⚠️ Failed to save main docs response: {e}")
+
+        if "⚠️ Ошибка" in main_readme:
+            print(f"[LlmAgent] Ошибка при генерации главного README: {main_readme}")
+        else:
+            print("[LlmAgent] Главный README для docs успешно сгенерирован.")
+
+        return main_readme
+
+    def update_folder_documentation(
+        self,
+        folder_name: str,
+        recent_prs: List[Dict[str, Any]],
+        ast_data: Dict[str, Any],
+        files_content: Dict[str, str],
+        model_key: Optional[SUPPORTED_MODELS] = None,
+    ) -> str:
+        """
+        Update documentation for a specific folder based on recent changes.
+
+        Args:
+            folder_name: Name of the folder to update documentation for
+            recent_prs: List of recent merged pull requests
+            ast_data: AST analysis data for files in this folder
+            files_content: Content of files in this folder
+            model_key: LLM model to use
+
+        Returns:
+            Updated markdown documentation for the folder
+        """
+        if not self.openrouter_api_key:
+            print("[LlmAgent] OpenRouter API ключ не настроен. Возврат заглушки.")
+            return "# Ошибка\n\nAPI ключ для LLM не настроен."
+
+        current_model_key = model_key or self.default_model_key
+        actual_model_name = self.DEFAULT_MODEL_MAPPING.get(current_model_key)
+
+        if not actual_model_name:
+            actual_model_name = self.DEFAULT_MODEL_MAPPING.get(self.default_model_key)
+            if not actual_model_name:
+                return "# Ошибка\n\nНе удалось определить модель LLM."
+
+        llm_logger.info(f"🔄 Updating documentation for folder: {folder_name}")
+        llm_logger.info(f"🤖 Model: {actual_model_name}")
+        llm_logger.info(f"📋 Recent PRs to analyze: {len(recent_prs)}")
+
+        # Analyze recent changes related to this folder
+        folder_related_changes = []
+        for pr in recent_prs:
+            folder_files = [
+                file_info
+                for file_info in pr.get("files_changed", [])
+                if file_info["filename"].startswith(f"{folder_name}/")
+                or (folder_name == "root" and "/" not in file_info["filename"])
+            ]
+            if folder_files:
+                folder_related_changes.append({"pr": pr, "files": folder_files})
+
+        # Construct PR summary for this folder
+        pr_summary = f"Изменения в папке {folder_name} (из последних PR):\n"
+        if folder_related_changes:
+            for change in folder_related_changes[:3]:  # Limit to 3 most recent
+                pr = change["pr"]
+                pr_summary += f"\n**PR #{pr['number']}: {pr['title']}**\n"
+                pr_summary += f"- Дата: {pr['merged_at']}\n"
+                if pr["body"]:
+                    body_preview = (
+                        pr["body"][:200] + "..."
+                        if len(pr["body"]) > 200
+                        else pr["body"]
+                    )
+                    pr_summary += f"- Описание: {body_preview}\n"
+                pr_summary += f"- Измененные файлы в {folder_name}:\n"
+                for file_info in change["files"]:
+                    pr_summary += f"  - {file_info['filename']} ({file_info['status']}, +{file_info['additions']}/-{file_info['deletions']})\n"
+        else:
+            pr_summary += f"Нет изменений в папке {folder_name} в последних PR.\n"
+
+        # Current folder structure
+        current_structure = f"Текущая структура папки {folder_name}:\n"
+        for filepath in sorted(files_content.keys()):
+            current_structure += f"- `{filepath}`\n"
+
+        # Current components analysis
+        current_components = f"Текущие компоненты папки {folder_name}:\n"
+        if ast_data.get("file_details"):
+            for filepath, details in ast_data["file_details"].items():
+                current_components += f"\n**{filepath}**:\n"
+                if "classes" in details and details["classes"]:
+                    class_names = [cls["name"] for cls in details["classes"]]
+                    current_components += f"- Классы: {', '.join(class_names)}\n"
+                if "functions" in details and details["functions"]:
+                    func_names = [func["name"] for func in details["functions"]]
+                    current_components += f"- Функции: {', '.join(func_names)}\n"
+
+        prompt = f"""
+Ты — опытный технический писатель, специализирующийся на поддержании актуальной документации для модулей программных проектов.
+
+Твоя задача — обновить документацию для папки/модуля "{folder_name}" на основе последних изменений в проекте.
+
+**ВАЖНО:** Создай новую актуальную документацию, учитывая последние изменения. Если изменений в этой папке не было, создай документацию на основе текущего состояния.
+
+**Анализ изменений:**
+{pr_summary}
+
+**Текущее состояние папки:**
+{current_structure}
+
+{current_components}
+
+**Требования к обновленной документации:**
+1. **Формат:** Строго Markdown
+2. **Язык:** Русский
+3. **Структура документа:**
+   - # {folder_name.title()}
+   - ## Описание (что делает этот модуль/папка)
+   - ## Последние изменения (если были значимые изменения)
+   - ## Компоненты (файлы и их назначение)
+   - ## Основные классы и функции
+   - ## Примеры использования (если применимо)
+
+**Подход к обновлению:**
+- Учти все изменения из PR, которые касаются этой папки
+- Обнови описания компонентов, если они изменились
+- Добавь информацию о новых файлах или функциях
+- Убери информацию об удаленных компонентах
+- Обнови примеры использования, если API изменился
+
+**Создай обновленную документацию для папки "{folder_name}":**
+"""
+
+        # Save prompt for debugging
+        import datetime
+
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        prompt_filename = f"logs/llm_update_folder_prompt_{folder_name}_{timestamp}.txt"
+        try:
+            os.makedirs("logs", exist_ok=True)
+            with open(prompt_filename, "w", encoding="utf-8") as f:
+                f.write(f"UPDATE FOLDER DOCUMENTATION PROMPT - {folder_name}\n")
+                f.write("=" * 80 + "\n\n")
+                f.write(prompt)
+            llm_logger.info(f"💾 Update folder prompt saved: {prompt_filename}")
+        except Exception as e:
+            llm_logger.warning(f"⚠️ Failed to save update folder prompt: {e}")
+
+        updated_folder_doc = _ask_openrouter_llm(
+            prompt=prompt,
+            model_name=actual_model_name,
+            api_key=self.openrouter_api_key,
+        )
+
+        # Save response
+        try:
+            with open(prompt_filename, "a", encoding="utf-8") as f:
+                f.write("\n\n" + "=" * 80 + "\n")
+                f.write("LLM RESPONSE:\n")
+                f.write("=" * 80 + "\n\n")
+                f.write(updated_folder_doc)
+            llm_logger.info(f"💾 Update folder response saved: {prompt_filename}")
+        except Exception as e:
+            llm_logger.warning(f"⚠️ Failed to save update folder response: {e}")
+
+        if "⚠️ Ошибка" in updated_folder_doc:
+            print(
+                f"[LlmAgent] Ошибка при обновлении документации папки {folder_name}: {updated_folder_doc}"
+            )
+        else:
+            print(f"[LlmAgent] Документация папки {folder_name} успешно обновлена.")
+
+        return updated_folder_doc
 
     def update_readme_content(
         self,
@@ -501,7 +935,6 @@ class LlmAgent:
     ) -> str:
         """
         Update existing README content based on recent merged PRs and current project state.
-
         Args:
             existing_readme: Current README content
             recent_prs: List of recent merged pull requests
@@ -509,7 +942,6 @@ class LlmAgent:
             files_content: Current repository files content
             style: Documentation style ("summary" or "detailed")
             model_key: LLM model to use
-
         Returns:
             Updated README content as markdown string
         """
@@ -554,7 +986,6 @@ class LlmAgent:
                         else pr["body"]
                     )
                     pr_summary += f"- Описание: {body_preview}\n"
-
                 if pr["files_changed"]:
                     pr_summary += f"- Измененные файлы ({len(pr['files_changed'])}):\n"
                     for file_info in pr["files_changed"][
@@ -584,56 +1015,51 @@ class LlmAgent:
 
         # Construct update prompt
         prompt = f"""
-Ты — опытный технический писатель и разработчик, специализирующийся на поддержании актуальной документации для программных проектов.
+        Ты — опытный технический писатель и разработчик, специализирующийся на поддержании актуальной документации для программных проектов.
+        Твоя задача — проанализировать существующий README.md файл и обновить его на основе последних изменений в проекте, если это необходимо.
 
-Твоя задача — проанализировать существующий README.md файл и обновить его на основе последних изменений в проекте, если это необходимо.
+        **ВАЖНО:** Обновляй документацию ТОЛЬКО если есть существенные изменения, которые влияют на:
+        - Функциональность проекта
+        - Способы установки или запуска
+        - Архитектуру или структуру проекта
+        - Новые возможности или компоненты
+        - Изменения в API или интерфейсах
 
-**ВАЖНО:** Обновляй документацию ТОЛЬКО если есть существенные изменения, которые влияют на:
-- Функциональность проекта
-- Способы установки или запуска
-- Архитектуру или структуру проекта
-- Новые возможности или компоненты
-- Изменения в API или интерфейсах
+        Если изменения незначительные (исправления багов, рефакторинг без изменения функциональности, обновления зависимостей), то верни существующий README без изменений.
 
-Если изменения незначительные (исправления багов, рефакторинг без изменения функциональности, обновления зависимостей), то верни существующий README без изменений.
+        **Существующий README.md:**
+        ```markdown
+        {existing_readme}
+        Анализ последних изменений:
+        {pr_summary}
 
-**Существующий README.md:**
-```markdown
-{existing_readme}
-```
+        Текущее состояние проекта:
+        {project_structure_summary}
 
-**Анализ последних изменений:**
-{pr_summary}
+        Инструкции по обновлению:
 
-**Текущее состояние проекта:**
-{project_structure_summary}
+        Язык: Русский
+        Формат: Строго Markdown
+        Подход: Сохрани структуру и стиль существующего README
+        Обновления: Внеси изменения только там, где это действительно необходимо
+        Качество: Поддерживай профессиональный тон и ясность изложения
+        Что нужно проверить и обновить при необходимости:
 
-**Инструкции по обновлению:**
-1. **Язык:** Русский
-2. **Формат:** Строго Markdown
-3. **Подход:** Сохрани структуру и стиль существующего README
-4. **Обновления:** Внеси изменения только там, где это действительно необходимо
-5. **Качество:** Поддерживай профессиональный тон и ясность изложения
-
-**Что нужно проверить и обновить при необходимости:**
-- Описание проекта (если добавлены новые основные функции)
-- Список возможностей (если добавлены новые фичи)
-- Инструкции по установке (если изменились зависимости или процесс установки)
-- Примеры использования (если изменился API или добавлены новые способы использования)
-- Структура проекта (если добавлены новые важные директории или файлы)
-- Технологический стек (если добавлены новые технологии)
-
-**Если обновления не требуются, верни точно такой же README без изменений.**
-
-**Если обновления необходимы, верни обновленную версию README.md:**
-"""
+        Описание проекта (если добавлены новые основные функции)
+        Список возможностей (если добавлены новые фичи)
+        Инструкции по установке (если изменились зависимости или процесс установки)
+        Примеры использования (если изменился API или добавлены новые способы использования)
+        Структура проекта (если добавлены новые важные директории или файлы)
+        Технологический стек (если добавлены новые технологии)
+        Если обновления не требуются, верни точно такой же README без изменений.
+        Если обновления необходимы, верни обновленную версию README.md:
+        """
 
         # Save prompt to file for debugging
         import datetime
 
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
         prompt_filename = f"logs/llm_update_prompt_{timestamp}.txt"
-
         try:
             import os
 
@@ -656,8 +1082,7 @@ class LlmAgent:
                 f.write("\n\n" + "=" * 80 + "\n")
                 f.write("END OF PROMPT\n")
                 f.write("=" * 80 + "\n")
-
-            llm_logger.info(f"💾 Update prompt saved to file: {prompt_filename}")
+                llm_logger.info(f"💾 Update prompt saved to file: {prompt_filename}")
         except Exception as e:
             llm_logger.warning(f"⚠️ Failed to save update prompt to file: {e}")
 
@@ -677,10 +1102,9 @@ class LlmAgent:
                 f.write("\n\n" + "=" * 80 + "\n")
                 f.write("END OF RESPONSE\n")
                 f.write("=" * 80 + "\n")
-
-            llm_logger.info(
-                f"💾 LLM update response appended to file: {prompt_filename}"
-            )
+                llm_logger.info(
+                    f"💾 LLM update response appended to file: {prompt_filename}"
+                )
         except Exception as e:
             llm_logger.warning(f"⚠️ Failed to save LLM update response to file: {e}")
 
@@ -690,3 +1114,4 @@ class LlmAgent:
             print(f"[LlmAgent] README успешно обновлен моделью {actual_model_name}.")
 
         return updated_readme
+
