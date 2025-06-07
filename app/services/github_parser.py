@@ -1,13 +1,25 @@
+# app/services/github_parser.py
+
+import logging
 import os
 import re
-from typing import List, Dict, Optional, Any
+from typing import Any, Dict, List, Optional
+
+from dotenv import load_dotenv
 from github import (
     Github,
-    UnknownObjectException,
-    RateLimitExceededException,
     GithubException,
+    RateLimitExceededException,
+    UnknownObjectException,
 )
 from dotenv import load_dotenv
+
+# Загрузка переменных окружения, если этот файл запускается отдельно (для тестирования)
+# В основном приложении Streamlit это обычно делается в главном файле ui.py
+if __name__ == "__main__":
+    load_dotenv(
+        dotenv_path="../../.env"
+    )  # Укажите правильный путь к .env, если тестируете локально
 
 
 class GithubParser:
@@ -51,7 +63,7 @@ class GithubParser:
         ".less",  # Добавим немного фронтенда и конфигов
     ]
     MAX_FILE_SIZE_BYTES = (
-        1 * 1024 * 1024
+        3 * 1024 * 1024
     )  # 1 MB, ограничение на размер файла для загрузки через API
 
     def __init__(self, github_token: Optional[str] = None):
@@ -266,8 +278,17 @@ class GithubParser:
 
         print(f"Целевые расширения файлов: {current_allowed_extensions}")
 
+        # Log GitHub parsing start
+        github_logger.info(f"🔍 Starting GitHub parsing for repository: {repo_url}")
+        github_logger.info(f"📋 Target file extensions: {current_allowed_extensions}")
+        if target_languages:
+            github_logger.info(f"🎯 Target languages: {target_languages}")
+
         repo_full_name = self._extract_repo_name_from_url(repo_url)
         if not repo_full_name:
+            github_logger.error(
+                f"❌ Failed to extract repository name from URL: {repo_url}"
+            )
             print(
                 f"Ошибка: Некорректный URL репозитория или не удалось извлечь owner/repo: {repo_url}"
             )
@@ -275,7 +296,16 @@ class GithubParser:
 
         try:
             print(f"Доступ к репозиторию: {repo_full_name}")
+            github_logger.info(f"🔗 Accessing repository: {repo_full_name}")
             repo = self.github_client.get_repo(repo_full_name)
+
+            # Log repository info
+            github_logger.info(
+                f"📊 Repository info - Name: {repo.name}, Stars: {repo.stargazers_count}, Language: {repo.language}"
+            )
+            github_logger.info(
+                f"📝 Repository description: {repo.description or 'No description'}"
+            )
 
             if branch:
                 try:
@@ -301,11 +331,34 @@ class GithubParser:
                 print(f"Используется ветка по умолчанию: '{branch}'")
 
             print(f"Получение файлов из {repo_full_name} (ветка: {branch})...")
+            github_logger.info(f"🌿 Using branch: {branch}")
+            github_logger.info(f"📁 Starting recursive file fetch from root directory")
+
             all_files_content = self._fetch_files_recursively(
                 repo, "", branch, current_allowed_extensions
             )  # Начинаем с корневой директории
 
             print(f"Завершено. Найдено {len(all_files_content)} релевантных файлов.")
+
+            # Log detailed file information
+            github_logger.info(
+                f"✅ GitHub parsing completed. Found {len(all_files_content)} relevant files"
+            )
+
+            total_size = 0
+            for file_path, content in all_files_content.items():
+                file_size = len(content.encode("utf-8"))
+                total_size += file_size
+                # Log first few lines of each file for debugging
+                preview = content[:200].replace("\n", "\\n").replace("\r", "\\r")
+                github_logger.info(
+                    f"📄 File: {file_path} | Size: {file_size} bytes | Preview: {preview}..."
+                )
+
+            github_logger.info(
+                f"📊 Total content size: {total_size} bytes ({total_size/1024:.1f} KB)"
+            )
+
             return all_files_content
 
         except UnknownObjectException:

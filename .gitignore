@@ -9,4 +9,9 @@ __pycache__/
 # Environments
 .env
 .venv
+venv
 .flake8
+
+# Logs and debug files
+logs/
+*.log
