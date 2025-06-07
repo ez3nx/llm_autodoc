@@ -73,6 +73,25 @@ def main():
     for operation in calc.get_history():
         print(f"  {operation}")
 
+    # Demonstrate new utility functions
+    print("\n--- Utility Functions Demo ---")
+    numbers = [1, 2, 3, 4, 5]
+    avg = sum(numbers) / len(numbers)  # Simple average calculation
+    print(f"Average of {numbers}: {avg}")
+
+    # Check if a number is prime
+    test_number = 17
+    print(
+        f"Is {test_number} prime? {test_number > 1 and all(test_number % i != 0 for i in range(2, int(test_number**0.5) + 1))}"
+    )
+
+    # Generate Fibonacci sequence
+    fib_count = 8
+    fib = [0, 1]
+    for i in range(2, fib_count):
+        fib.append(fib[i - 1] + fib[i - 2])
+    print(f"First {fib_count} Fibonacci numbers: {fib}")
+
 
 if __name__ == "__main__":
     main()

@@ -101,11 +101,7 @@ def _ask_openrouter_llm(
 
 # --- Класс LlmAgent ---
 class LlmAgent:
-    SUPPORTED_MODELS = Literal[
-        "claude-sonnet",
-        "gemini-flash",
-        "gpt-4o-mini"
-    ]
+    SUPPORTED_MODELS = Literal["claude-sonnet", "gemini-flash", "gpt-4o-mini"]
     DEFAULT_MODEL_MAPPING = {
         "claude-sonnet": "anthropic/claude-3-sonnet",
         "gemini-flash": "google/gemini-flash-1.5",
@@ -130,6 +126,151 @@ class LlmAgent:
             print(
                 f"Модель по умолчанию: {self.default_model_key} -> {self.DEFAULT_MODEL_MAPPING.get(self.default_model_key)}"
             )
+
+    def _generate_fallback_readme(
+        self, ast_data: Dict[str, Any], files_content: Dict[str, str]
+    ) -> str:
+        """
+        Generate basic README content without LLM when API key is not available.
+
+        Args:
+            ast_data: AST analysis data
+            files_content: Repository files content
+
+        Returns:
+            Basic README content as markdown string
+        """
+        readme_content = "# Project Documentation\n\n"
+        readme_content += "> ⚠️ This documentation was generated automatically without LLM assistance.\n"
+        readme_content += (
+            "> For enhanced documentation, please configure OpenRouter API key.\n\n"
+        )
+
+        # Project structure
+        readme_content += "## 📁 Project Structure\n\n"
+        directories = set()
+        file_types = {}
+
+        for filepath in files_content.keys():
+            parts = filepath.split("/")
+            if len(parts) > 1:
+                directories.add(parts[0])
+
+            # Count file types
+            ext = filepath.split(".")[-1].lower() if "." in filepath else "other"
+            file_types[ext] = file_types.get(ext, 0) + 1
+
+        if directories:
+            readme_content += "### Main Directories:\n"
+            for directory in sorted(directories):
+                files_in_dir = [
+                    f for f in files_content.keys() if f.startswith(directory + "/")
+                ]
+                readme_content += f"- `{directory}/` - {len(files_in_dir)} files\n"
+            readme_content += "\n"
+
+        # File types summary
+        if file_types:
+            readme_content += "### File Types:\n"
+            for ext, count in sorted(
+                file_types.items(), key=lambda x: x[1], reverse=True
+            ):
+                readme_content += f"- `.{ext}` files: {count}\n"
+            readme_content += "\n"
+
+        # Configuration files
+        config_files = []
+        for filepath in files_content.keys():
+            filename = filepath.lower()
+            if any(
+                config_file in filename
+                for config_file in [
+                    "requirements.txt",
+                    "pyproject.toml",
+                    "package.json",
+                    "dockerfile",
+                    "docker-compose",
+                    "setup.py",
+                    "poetry.lock",
+                    "yarn.lock",
+                ]
+            ):
+                config_files.append(filepath)
+
+        if config_files:
+            readme_content += "## ⚙️ Configuration Files\n\n"
+            for config_file in config_files:
+                readme_content += f"- `{config_file}`\n"
+            readme_content += "\n"
+
+        # AST analysis summary
+        if ast_data.get("file_details"):
+            readme_content += "## 🔍 Code Analysis\n\n"
+            total_functions = 0
+            total_classes = 0
+
+            for filepath, details in ast_data["file_details"].items():
+                if details.get("functions"):
+                    total_functions += len(details["functions"])
+                if details.get("classes"):
+                    total_classes += len(details["classes"])
+
+            readme_content += f"- Total functions found: {total_functions}\n"
+            readme_content += f"- Total classes found: {total_classes}\n"
+            readme_content += f"- Files analyzed: {len(ast_data['file_details'])}\n\n"
+
+            # Show main files with their components
+            readme_content += "### Main Code Files:\n"
+            for filepath, details in list(ast_data["file_details"].items())[:10]:
+                readme_content += f"\n**`{filepath}`**\n"
+                if details.get("functions"):
+                    func_names = [f"`{f['name']}()`" for f in details["functions"][:5]]
+                    readme_content += f"- Functions: {', '.join(func_names)}\n"
+                if details.get("classes"):
+                    class_names = [f"`{c['name']}`" for c in details["classes"][:3]]
+                    readme_content += f"- Classes: {', '.join(class_names)}\n"
+
+        # Installation section
+        readme_content += "\n## 🚀 Installation\n\n"
+
+        # Check for Python project
+        if any(
+            "requirements.txt" in f or "pyproject.toml" in f or "setup.py" in f
+            for f in files_content.keys()
+        ):
+            readme_content += "This appears to be a Python project.\n\n"
+            readme_content += "```bash\n"
+            if "requirements.txt" in files_content:
+                readme_content += "pip install -r requirements.txt\n"
+            elif "pyproject.toml" in files_content:
+                readme_content += "pip install -e .\n"
+            readme_content += "```\n\n"
+
+        # Check for Node.js project
+        elif "package.json" in files_content:
+            readme_content += "This appears to be a Node.js project.\n\n"
+            readme_content += "```bash\n"
+            readme_content += "npm install\n"
+            readme_content += "```\n\n"
+
+        # Usage section
+        readme_content += "## 📖 Usage\n\n"
+        readme_content += "Please refer to the source code for usage instructions.\n\n"
+
+        # Contributing section
+        readme_content += "## 🤝 Contributing\n\n"
+        readme_content += "1. Fork the repository\n"
+        readme_content += "2. Create your feature branch\n"
+        readme_content += "3. Commit your changes\n"
+        readme_content += "4. Push to the branch\n"
+        readme_content += "5. Open a Pull Request\n\n"
+
+        readme_content += "---\n"
+        readme_content += (
+            "*This documentation was generated automatically by llm-autodoc*\n"
+        )
+
+        return readme_content
 
     def _construct_readme_prompt(
         self,
@@ -358,8 +499,10 @@ class LlmAgent:
         model_key: Optional[SUPPORTED_MODELS] = None,
     ) -> str:
         if not self.openrouter_api_key:
-            print("[LlmAgent] OpenRouter API ключ не настроен. Возврат заглушки.")
-            return "# Ошибка\n\nAPI ключ для LLM не настроен. Пожалуйста, проверьте конфигурацию."
+            print(
+                "[LlmAgent] OpenRouter API ключ не настроен. Создание базовой документации..."
+            )
+            return self._generate_fallback_readme(ast_data, files_content)
 
         current_model_key = model_key or self.default_model_key
         actual_model_name = self.DEFAULT_MODEL_MAPPING.get(current_model_key)
@@ -514,8 +657,10 @@ class LlmAgent:
             Updated README content as markdown string
         """
         if not self.openrouter_api_key:
-            print("[LlmAgent] OpenRouter API ключ не настроен. Возврат заглушки.")
-            return "# Ошибка\n\nAPI ключ для LLM не настроен. Пожалуйста, проверьте конфигурацию."
+            print(
+                "[LlmAgent] OpenRouter API ключ не настроен. Обновление базовой документации..."
+            )
+            return self._generate_fallback_readme(ast_data, files_content)
 
         current_model_key = model_key or self.default_model_key
         actual_model_name = self.DEFAULT_MODEL_MAPPING.get(current_model_key)

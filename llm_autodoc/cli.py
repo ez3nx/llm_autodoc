@@ -45,7 +45,10 @@ def generate_docs(
         default_model=model,
     )
 
-    github_parser = GitHubParser(github_token=github_token or os.getenv("GITHUB_TOKEN"))
+    github_parser = GitHubParser(
+        github_token=github_token or os.getenv("GITHUB_TOKEN"),
+        validate_token=False,  # Don't validate token in CI/CD environment
+    )
 
     doc_generator = DocGenerator()
     ast_analyzer = AstAnalyzer()
@@ -111,7 +114,10 @@ def update_docs(
         default_model=model,
     )
 
-    github_parser = GitHubParser(github_token=github_token or os.getenv("GITHUB_TOKEN"))
+    github_parser = GitHubParser(
+        github_token=github_token or os.getenv("GITHUB_TOKEN"),
+        validate_token=False,  # Don't validate token in CI/CD environment
+    )
 
     ast_analyzer = AstAnalyzer()
 

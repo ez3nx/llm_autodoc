@@ -69,39 +69,54 @@ class GitHubParser:
         3 * 1024 * 1024
     )  # 1 MB, ограничение на размер файла для загрузки через API
 
-    def __init__(self, github_token: Optional[str] = None):
+    def __init__(self, github_token: Optional[str] = None, validate_token: bool = True):
         """
         Инициализирует GithubParser.
 
         Args:
-            github_token: Токен GitHub API. Если не предоставлен, пытается загрузить GITHUB_TOKEN_AUTODOC из .env.
+            github_token: Токен GitHub API. Если не предоставлен, пытается загрузить из переменных окружения.
+            validate_token: Проверять ли токен при инициализации (по умолчанию True).
         """
         if not github_token:
-            github_token = os.getenv("GITHUB_TOKEN_AUTODOC")
+            # Пробуем разные переменные окружения
+            github_token = (
+                os.getenv("GITHUB_TOKEN_AUTODOC")
+                or os.getenv("GITHUB_TOKEN")
+                or os.getenv("GH_TOKEN")
+            )
 
         if not github_token:
-            raise ValueError(
-                "Токен GitHub API не предоставлен. "
-                "Передайте его в конструктор или установите переменную окружения GITHUB_TOKEN_AUTODOC."
+            print(
+                "ПРЕДУПРЕЖДЕНИЕ: GitHub токен не найден. Функционал GitHub API будет ограничен."
             )
+            self.github_client = None
+            self.files_processed_count = 0
+            return
+
         try:
             self.github_client = Github(github_token)
-            # Проверим токен, сделав простой запрос
-            _ = self.github_client.get_user().login
-            print("GithubParser успешно инициализирован и токен валиден.")
-        except RateLimitExceededException:
-            print(
-                "Ошибка инициализации GithubParser: Превышен лимит запросов GitHub API."
-            )
-            raise
-        except GithubException as e:
-            if e.status == 401:  # Unauthorized
-                print(
-                    "Ошибка инициализации GithubParser: Невалидный токен GitHub API (401 Unauthorized)."
-                )
+
+            if validate_token:
+                # Проверим токен, сделав простой запрос
+                try:
+                    _ = self.github_client.get_user().login
+                    print("GitHubParser успешно инициализирован и токен валиден.")
+                except GithubException as e:
+                    if e.status == 403:
+                        print(
+                            "ПРЕДУПРЕЖДЕНИЕ: GitHub токен имеет ограниченные права, но будет использован для локальных операций."
+                        )
+                    else:
+                        print(f"ПРЕДУПРЕЖДЕНИЕ: Ошибка при проверке токена: {e}")
             else:
-                print(f"Ошибка инициализации GithubParser при проверке токена: {e}")
-            raise
+                print("GitHubParser инициализирован без проверки токена.")
+
+        except RateLimitExceededException:
+            print("ПРЕДУПРЕЖДЕНИЕ: Превышен лимит запросов GitHub API.")
+            self.github_client = None
+        except Exception as e:
+            print(f"ПРЕДУПРЕЖДЕНИЕ: Ошибка инициализации GitHubParser: {e}")
+            self.github_client = None
 
         self.files_processed_count = 0
 
@@ -591,7 +606,17 @@ class GitHubParser:
                 for d in dirs
                 if not d.startswith(".")
                 and d
-                not in ["node_modules", "__pycache__", "venv", "env", "dist", "build"]
+                not in [
+                    "node_modules",
+                    "__pycache__",
+                    "venv",
+                    "env",
+                    "dist",
+                    "build",
+                    ".git",
+                    ".pytest_cache",
+                    "llm_autodoc.egg-info",
+                ]
             ]
 
             for file in files:

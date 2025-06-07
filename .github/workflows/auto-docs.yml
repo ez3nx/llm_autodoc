@@ -53,8 +53,23 @@ jobs:
       run: |
         echo "🚀 Starting automatic documentation generation..."
         
+        # Check if API keys are available
+        if [ -z "$OPENROUTER_API_KEY" ]; then
+          echo "⚠️ OPENROUTER_API_KEY not found - will use fallback mode"
+        else
+          echo "✅ OPENROUTER_API_KEY is configured"
+        fi
+        
         # Generate new README
         llm-autodoc generate . --output README_new.md --model gemini-flash --style summary
+        
+        # Check if generation was successful
+        if [ $? -eq 0 ]; then
+          echo "✅ Documentation generation completed successfully"
+        else
+          echo "❌ Documentation generation failed"
+          exit 1
+        fi
         
         # Check if README was generated successfully
         if [ -f "README_new.md" ]; then
