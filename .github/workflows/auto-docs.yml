@@ -1,0 +1,167 @@
+name: Auto Documentation Update
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches: [main, master, develop]
+  
+  # Allow manual trigger
+  workflow_dispatch:
+    inputs:
+      target_branch:
+        description: 'Target branch for documentation update'
+        required: false
+        default: 'main'
+
+jobs:
+  auto-docs:
+    runs-on: ubuntu-latest
+    
+    permissions:
+      contents: write
+      pull-requests: write
+      
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+        token: ${{ secrets.GITHUB_TOKEN }}
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        
+    - name: Cache pip dependencies
+      uses: actions/cache@v3
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -e .
+        
+    - name: Generate documentation
+      env:
+        OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        echo "🚀 Starting automatic documentation generation..."
+        
+        # Generate new README
+        llm-autodoc generate . --output README_new.md --model gemini-flash --style summary
+        
+        # Check if README was generated successfully
+        if [ -f "README_new.md" ]; then
+          echo "✅ Documentation generated successfully"
+          
+          # Compare with existing README
+          if [ -f "README.md" ]; then
+            if ! diff -q README.md README_new.md > /dev/null; then
+              echo "📝 Documentation has changes, updating README.md"
+              mv README_new.md README.md
+              echo "DOCS_UPDATED=true" >> $GITHUB_ENV
+            else
+              echo "📋 Documentation is up to date"
+              rm README_new.md
+              echo "DOCS_UPDATED=false" >> $GITHUB_ENV
+            fi
+          else
+            echo "📝 Creating new README.md"
+            mv README_new.md README.md
+            echo "DOCS_UPDATED=true" >> $GITHUB_ENV
+          fi
+        else
+          echo "❌ Failed to generate documentation"
+          exit 1
+        fi
+    
+    - name: Commit and push changes
+      if: env.DOCS_UPDATED == 'true'
+      run: |
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+        
+        git add README.md
+        git commit -m "docs: auto-update README.md via LLM AutoDoc
+        
+        - Generated using LLM AutoDoc
+        - Updated based on current codebase analysis
+        - Triggered by PR #${{ github.event.number }}"
+        
+        git push
+    
+    - name: Comment on PR
+      if: env.DOCS_UPDATED == 'true' && github.event_name == 'pull_request'
+      uses: actions/github-script@v7
+      with:
+        script: |
+          github.rest.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            body: `## 📚 Documentation Auto-Updated
+            
+            The README.md has been automatically updated based on the current codebase analysis using LLM AutoDoc.
+            
+            ### Changes:
+            - ✅ Analyzed repository structure
+            - ✅ Generated comprehensive documentation
+            - ✅ Updated README.md with latest information
+            
+            The documentation reflects the current state of the codebase and includes:
+            - Project overview and purpose
+            - Installation instructions
+            - Usage examples
+            - API documentation
+            - Contributing guidelines
+            
+            *This update was generated automatically by [LLM AutoDoc](https://github.com/yourusername/llm_autodoc)*`
+          })
+    
+    - name: Create documentation review
+      if: env.DOCS_UPDATED == 'true' && github.event_name == 'pull_request'
+      uses: actions/github-script@v7
+      with:
+        script: |
+          // Create a review comment about the documentation update
+          github.rest.pulls.createReview({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            pull_number: context.issue.number,
+            body: `## 🤖 Automated Code Review & Documentation Update
+            
+            I've analyzed this pull request and updated the documentation accordingly. Here's what I found:
+            
+            ### Code Analysis Summary:
+            - Analyzed repository structure and dependencies
+            - Reviewed code changes and their impact
+            - Generated updated documentation reflecting current state
+            
+            ### Documentation Updates:
+            - ✅ README.md has been updated with latest information
+            - ✅ Project structure and features documented
+            - ✅ Installation and usage instructions refreshed
+            
+            ### Recommendations:
+            - Review the updated README.md for accuracy
+            - Ensure all new features are properly documented
+            - Consider adding more specific examples if needed
+            
+            *This review and documentation update was performed automatically by LLM AutoDoc*`,
+            event: 'COMMENT'
+          })
+    
+    - name: Summary
+      run: |
+        if [ "${{ env.DOCS_UPDATED }}" == "true" ]; then
+          echo "✅ Documentation successfully updated and committed"
+        else
+          echo "📋 No documentation updates needed"
+        fi
+        echo "🎉 Auto-documentation workflow completed" 
