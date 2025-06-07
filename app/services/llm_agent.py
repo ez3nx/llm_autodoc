@@ -102,20 +102,20 @@ def _ask_openrouter_llm(
 # --- Класс LlmAgent ---
 class LlmAgent:
     SUPPORTED_MODELS = Literal[
-        "qwen-coder",
+        "claude-sonnet",
         "gemini-flash",
-        "gpt-3.5-turbo",
+        "gpt-4o-mini"
     ]
     DEFAULT_MODEL_MAPPING = {
-        "qwen-coder": "qwen/qwen-2.5-coder-32b-instruct",
+        "claude-sonnet": "anthropic/claude-3-sonnet",
         "gemini-flash": "google/gemini-flash-1.5",
-        "gpt-3.5-turbo": "openai/gpt-3.5-turbo",
+        "gpt-4o-mini": "openai/gpt-4o",
     }
 
     def __init__(
         self,
         openrouter_api_key: Optional[str] = None,
-        default_model: SUPPORTED_MODELS = "qwen-coder",
+        default_model: SUPPORTED_MODELS = "gemini-flash",
     ):
         self.openrouter_api_key = openrouter_api_key or os.getenv("OPENROUTER_API_KEY")
         self.default_model_key = default_model
