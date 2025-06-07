@@ -605,7 +605,7 @@ class GitHubParser:
                 d
                 for d in dirs
                 if not d.startswith(".")
-                and d
+                and d.lower()
                 not in [
                     "node_modules",
                     "__pycache__",
@@ -616,12 +616,69 @@ class GitHubParser:
                     ".git",
                     ".pytest_cache",
                     "llm_autodoc.egg-info",
+                    "site-packages",
+                    "lib",
+                    "bin",
+                    "include",
+                    "share",
+                    "var",
+                    "tmp",
+                    "temp",
+                    "cache",
+                    "logs",
+                    "log",
+                    ".vscode",
+                    ".idea",
+                    ".vs",
+                    "coverage",
+                    ".coverage",
+                    ".tox",
+                    ".mypy_cache",
+                    ".pytest_cache",
+                    "htmlcov",
+                    "notebooks",  # Jupyter notebooks often contain large outputs
+                    "data",
+                    "datasets",
+                    "models",
+                    "checkpoints",
+                    "weights",
                 ]
+                and not any(
+                    pattern in d.lower()
+                    for pattern in [
+                        "venv",
+                        "env",
+                        "cache",
+                        "temp",
+                        "tmp",
+                        "log",
+                        "backup",
+                        "bak",
+                        ".egg",
+                        "site-packages",
+                    ]
+                )
             ]
 
             for file in files:
                 file_path = Path(root) / file
                 relative_path = file_path.relative_to(repo_path)
+
+                # Skip hidden files and common non-code files
+                if file.startswith(".") or file.lower() in [
+                    "license",
+                    "changelog",
+                    "authors",
+                    "contributors",
+                    "copying",
+                    "install",
+                    "news",
+                    "readme",
+                    "todo",
+                    "version",
+                    "history",
+                ]:
+                    continue
 
                 # Check if file extension is in our allowed list
                 _, ext = os.path.splitext(file)

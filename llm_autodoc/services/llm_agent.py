@@ -370,8 +370,8 @@ class LlmAgent:
         else:
             project_structure_info = ""
 
-        # Include ALL parsed files in the context
-        all_files_content = "\n\nВсе файлы проекта:\n"
+        # Include SELECTED parsed files in the context with smart filtering
+        all_files_content = "\n\nВажные файлы проекта:\n"
 
         # Sort files by importance: main files first, then by extension, then alphabetically
         def file_priority(filepath):
@@ -379,7 +379,7 @@ class LlmAgent:
             # Priority 1: Main entry points
             if any(
                 main_file in filename
-                for main_file in ["main.", "app.", "server.", "index."]
+                for main_file in ["main.", "app.", "server.", "index.", "__init__."]
             ):
                 return (0, filepath)
             # Priority 2: Configuration files
@@ -391,23 +391,24 @@ class LlmAgent:
                     "package.json",
                     "dockerfile",
                     "docker-compose",
-                    "gunicorn.config",
-                    ".yml",
-                    ".yaml",
+                    "setup.py",
+                    "makefile",
                 ]
             ):
                 return (1, filepath)
-            # Priority 3: Python files
-            elif filename.endswith((".py")):
+            # Priority 3: Python files in root or main directories
+            elif filename.endswith(".py") and "/" not in filepath:
                 return (2, filepath)
-            # Priority 4: Other code files
+            # Priority 4: Other important code files
             elif filename.endswith(
-                (".go", ".ts", ".js", ".jsx", ".tsx", ".java", ".kt")
+                (".py", ".go", ".ts", ".js", ".jsx", ".tsx", ".java", ".kt")
+            ) and not any(
+                skip in filepath.lower() for skip in ["test", "spec", "__pycache__"]
             ):
                 return (3, filepath)
             # Priority 5: Documentation and config
             elif filename.endswith(
-                (".md", ".json", ".toml", ".yml", ".yaml", ".cfg", ".ini")
+                (".md", ".rst", ".toml", ".yml", ".yaml", ".cfg", ".ini")
             ):
                 return (4, filepath)
             # Priority 6: Everything else
@@ -416,30 +417,64 @@ class LlmAgent:
 
         sorted_files = sorted(files_content.items(), key=lambda x: file_priority(x[0]))
 
+        # Limit number of files to prevent token overflow
+        MAX_FILES = 50 if len(files_content) > 100 else 100
+        MAX_TOTAL_CHARS = 500000  # ~125k tokens approximately
+
+        selected_files = []
+        total_chars = 0
+
         for filepath, content in sorted_files:
+            if len(selected_files) >= MAX_FILES:
+                break
+
+            # Skip very large files
+            if len(content) > 50000:  # Skip files larger than 50k chars
+                continue
+
             # Limit content length to avoid token limits
-            max_content_length = 2000 if len(files_content) > 10 else 4000
+            max_content_length = 3000 if len(files_content) > 20 else 5000
 
             if len(content) > max_content_length:
                 truncated_content = (
-                    content[:max_content_length] + "\n... (файл обрезан)"
+                    content[:max_content_length]
+                    + "\n... (файл обрезан для экономии токенов)"
                 )
             else:
                 truncated_content = content
 
-            all_files_content += f"\n--- {filepath} ---\n"
-            all_files_content += f"Размер: {len(content)} символов\n"
-            all_files_content += f"```\n{truncated_content}\n```\n"
+            file_section = f"\n--- {filepath} ---\n"
+            file_section += f"Размер: {len(content)} символов\n"
+            file_section += f"```\n{truncated_content}\n```\n"
+
+            # Check if adding this file would exceed our limit
+            if total_chars + len(file_section) > MAX_TOTAL_CHARS:
+                break
+
+            selected_files.append((filepath, file_section))
+            total_chars += len(file_section)
+            all_files_content += file_section
+
+        # Add summary of what was included/excluded
+        all_files_content += f"\n\n📊 Статистика анализа:\n"
+        all_files_content += f"- Всего файлов найдено: {len(files_content)}\n"
+        all_files_content += f"- Файлов включено в анализ: {len(selected_files)}\n"
+        all_files_content += f"- Общий размер контента: {total_chars:,} символов\n"
+
+        if len(selected_files) < len(files_content):
+            excluded_count = len(files_content) - len(selected_files)
+            all_files_content += (
+                f"- Исключено файлов (для экономии токенов): {excluded_count}\n"
+            )
 
         # Keep the old variable name for compatibility
         contextual_code_snippets = all_files_content
 
         # Log information about files included in prompt
         llm_logger.info(
-            f"📄 Including ALL {len(files_content)} files in prompt context"
+            f"📄 Including {len(selected_files)} out of {len(files_content)} files in prompt context"
         )
-        total_content_size = sum(len(content) for content in files_content.values())
-        llm_logger.info(f"📊 Total content size: {total_content_size} characters")
+        llm_logger.info(f"📊 Total content size: {total_chars:,} characters")
 
         # Support for different styles (from colleague's changes)
         if style == "detailed":
