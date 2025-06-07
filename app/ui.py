@@ -1,10 +1,11 @@
 # app/ui.py
 import os
 import sys
+
 import matplotlib.pyplot as plt
+import networkx as nx
 import pandas as pd
 import plotly.express as px
-import networkx as nx
 from matplotlib.style.core import available
 
 # Добавляем корневую директорию проекта (на один уровень выше 'app') в sys.path
@@ -250,17 +251,32 @@ with st.sidebar:
     selected_model_key = st.selectbox(
         "🤖 Выберите модель LLM",
         options=available_models,
-        index=available_models.index(llm_agent.default_model_key) # Устанавливаем дефолтное значение из агента
+        index=available_models.index(
+            llm_agent.default_model_key
+        ),  # Устанавливаем дефолтное значение из агента
     )
 
     # выбор стиля README
     readme_style = st.selectbox(
         "🎨 Стиль README",
         options=["summary", "detailed"],
-        index=0 # "summary" по умолчанию
+        index=0,  # "summary" по умолчанию
     )
 
-    if st.button("✨ Сгенерировать README", type="secondary", use_container_width=True):
+    # Создаем две колонки для кнопок
+    col1, col2 = st.columns(2)
+
+    with col1:
+        generate_clicked = st.button(
+            "✨ Сгенерировать README", type="secondary", use_container_width=True
+        )
+
+    with col2:
+        update_clicked = st.button(
+            "🔄 Обновить README", type="secondary", use_container_width=True
+        )
+
+    if generate_clicked:
         if repo_url:
             st.session_state.generated_readme = None
             st.session_state.error_message = None
@@ -295,11 +311,10 @@ with st.sidebar:
                     spinner_placeholder.text("3/4: Генерация описаний с помощью LLM...")
                     # Передаем выбранную модель и стиль, если добавили выбор в UI, иначе используются дефолтные
                     llm_output = llm_agent.generate_readme_content(
-                        ast_data, 
+                        ast_data,
                         files_content,
-                        model_key = selected_model_key,
-                        style = readme_style # выбор стиля
-
+                        model_key=selected_model_key,
+                        style=readme_style,  # выбор стиля
                     )
 
                     if llm_output.startswith("⚠️ Ошибка") or llm_output.startswith(
@@ -335,6 +350,150 @@ with st.sidebar:
         else:
             st.sidebar.warning("Пожалуйста, введите URL репозитория.")
 
+    if update_clicked:
+        if repo_url:
+            st.session_state.generated_readme = None
+            st.session_state.error_message = None
+
+            # Log the start of README update process
+            ui_logger.info(
+                f"🔄 Starting README update process for repository: {repo_url}"
+            )
+
+            try:
+                with st.spinner("🔄 Обновление README... Пожалуйста, подождите..."):
+                    spinner_placeholder = st.empty()
+
+                    # Step 1: Check if README exists
+                    spinner_placeholder.text(
+                        "1/5: Проверка наличия README в репозитории..."
+                    )
+                    ui_logger.info("📋 Step 1/5: Checking if README exists")
+
+                    readme_exists = github_parser.check_readme_exists(repo_url)
+                    if not readme_exists:
+                        st.session_state.error_message = (
+                            "❌ В вашем репозитории нет README файла. "
+                            "Попробуйте сначала сгенерировать его с помощью кнопки 'Сгенерировать README'."
+                        )
+                        spinner_placeholder.empty()
+                        st.rerun()
+
+                    ui_logger.info("✅ Step 1/5 completed: README exists")
+
+                    # Step 2: Get existing README content
+                    spinner_placeholder.text("2/5: Получение существующего README...")
+                    ui_logger.info("📄 Step 2/5: Getting existing README content")
+
+                    existing_readme = github_parser.get_existing_readme_content(
+                        repo_url
+                    )
+                    if not existing_readme:
+                        st.session_state.error_message = "❌ Не удалось получить содержимое существующего README файла."
+                        spinner_placeholder.empty()
+                        st.rerun()
+
+                    ui_logger.info("✅ Step 2/5 completed: Retrieved existing README")
+
+                    # Step 3: Get recent merged PRs
+                    spinner_placeholder.text("3/5: Получение последних merged PR...")
+                    ui_logger.info("🔍 Step 3/5: Getting recent merged PRs")
+
+                    recent_prs = github_parser.get_recent_merged_prs(repo_url, limit=10)
+                    ui_logger.info(
+                        f"✅ Step 3/5 completed: Found {len(recent_prs)} recent PRs"
+                    )
+
+                    # Check if there are any recent PRs
+                    if not recent_prs:
+                        st.session_state.error_message = None
+                        spinner_placeholder.empty()
+                        st.info(
+                            "ℹ️ В репозитории нет недавних merged Pull Request'ов. "
+                            "README не требует обновления, так как нет новых изменений для анализа."
+                        )
+                        ui_logger.info("ℹ️ No recent PRs found, skipping README update")
+                    else:
+                        # Show info about found PRs
+                        spinner_placeholder.text(
+                            f"Найдено {len(recent_prs)} недавних PR для анализа..."
+                        )
+                        ui_logger.info(
+                            f"📋 Found {len(recent_prs)} recent PRs to analyze"
+                        )
+
+                        # Step 4: Get current repository state
+                        spinner_placeholder.text(
+                            "4/5: Анализ текущего состояния репозитория..."
+                        )
+                        ui_logger.info(
+                            "📁 Step 4/5: Analyzing current repository state"
+                        )
+
+                        files_content = github_parser.get_repo_files_content(repo_url)
+                        if not files_content:
+                            st.session_state.error_message = (
+                                "❌ Не удалось получить файлы репозитория для анализа."
+                            )
+                            spinner_placeholder.empty()
+                            st.rerun()
+
+                        ast_data = ast_analyzer.analyze_repository(files_content)
+                        ui_logger.info(
+                            "✅ Step 4/5 completed: Repository analysis done"
+                        )
+
+                        # Step 5: Update README with LLM
+                        spinner_placeholder.text(
+                            "5/5: Обновление README с помощью LLM..."
+                        )
+                        ui_logger.info("🤖 Step 5/5: Updating README with LLM")
+
+                        updated_readme = llm_agent.update_readme_content(
+                            existing_readme=existing_readme,
+                            recent_prs=recent_prs,
+                            ast_data=ast_data,
+                            files_content=files_content,
+                            model_key=selected_model_key,
+                            style=readme_style,
+                        )
+
+                        if updated_readme.startswith(
+                            "⚠️ Ошибка"
+                        ) or updated_readme.startswith("# Ошибка"):
+                            st.session_state.error_message = (
+                                f"Ошибка от LLM: {updated_readme}"
+                            )
+                            spinner_placeholder.empty()
+                            st.rerun()
+
+                        st.session_state.generated_readme = updated_readme
+                        spinner_placeholder.empty()
+
+                        # Check if README was actually updated
+                        if updated_readme.strip() == existing_readme.strip():
+                            st.info(
+                                "ℹ️ README не требует обновления. Последние изменения не влияют на документацию."
+                            )
+                        else:
+                            st.success(
+                                "🎉 README успешно обновлен на основе последних изменений!"
+                            )
+
+            except Exception as e:
+                st.session_state.error_message = (
+                    f"Произошла непредвиденная ошибка при обновлении README: {str(e)}"
+                )
+                print(f"UI Update Error: {e}")
+                import traceback
+
+                traceback.print_exc()
+                if "spinner_placeholder" in locals():
+                    spinner_placeholder.empty()
+                st.rerun()
+        else:
+            st.sidebar.warning("Пожалуйста, введите URL репозитория.")
+
 # Основная область для вывода
 if st.session_state.error_message:
     st.error(
@@ -366,72 +525,105 @@ if st.session_state.generated_readme:
     st.markdown("---")
     st.markdown("## 📊 Аналитика и визуализация проекта", unsafe_allow_html=True)
 
-
     # 1. Распределение типов файлов
-    st.markdown(f"""
+    st.markdown(
+        f"""
     <div style="background-color:{LAMODA_DARK_GRAY_SUBTLE}; padding: 1.5rem; border-radius: 12px; border: 1px solid {LAMODA_MID_GRAY_BORDER}; margin-bottom: 2rem;">
     <h4 style="color: {LAMODA_LIME_ACCENT}; margin-bottom: 1rem;">📁 Распределение типов файлов в репозитории</h4>
-    """, unsafe_allow_html=True)
+    """,
+        unsafe_allow_html=True,
+    )
 
     # --- 1. Типы файлов
-    file_extensions = [file.split(".")[-1] for file in files_content.keys() if "." in file]
+    file_extensions = [
+        file.split(".")[-1] for file in files_content.keys() if "." in file
+    ]
     ext_counts = pd.Series(file_extensions).value_counts()
     fig1, ax1 = plt.subplots()
-    ax1.pie(ext_counts.values, labels=ext_counts.index, autopct='%1.1f%%', startangle=140)
+    ax1.pie(
+        ext_counts.values, labels=ext_counts.index, autopct="%1.1f%%", startangle=140
+    )
     ax1.axis("equal")
     st.pyplot(fig1)
 
     st.markdown("</div>", unsafe_allow_html=True)
 
     # --- 2. Структура проекта (treemap)
-    st.markdown(f"""
+    st.markdown(
+        f"""
     <div style="background-color:{LAMODA_DARK_GRAY_SUBTLE}; padding: 1.5rem; border-radius: 12px; border: 1px solid {LAMODA_MID_GRAY_BORDER}; margin-bottom: 2rem;">
     <h4 style="color: {LAMODA_LIME_ACCENT}; margin-bottom: 1rem;">🧱 Структура проекта (по размерам файлов)</h4>
-    """, unsafe_allow_html=True)
+    """,
+        unsafe_allow_html=True,
+    )
 
-    tree_df = pd.DataFrame([
-        {"path": f, "size": len(content)} for f, content in files_content.items()
-    ])
-    fig2 = px.treemap(tree_df, path=["path"], values="size", title="Treemap", height=400)
+    tree_df = pd.DataFrame(
+        [{"path": f, "size": len(content)} for f, content in files_content.items()]
+    )
+    fig2 = px.treemap(
+        tree_df, path=["path"], values="size", title="Treemap", height=400
+    )
     st.plotly_chart(fig2, use_container_width=True)
 
     st.markdown("</div>", unsafe_allow_html=True)
 
     # --- 3. Пример диаграммы архитектуры (простая C4)
-    st.markdown(f"""
+    st.markdown(
+        f"""
     <div style="background-color:{LAMODA_DARK_GRAY_SUBTLE}; padding: 1.5rem; border-radius: 12px; border: 1px solid {LAMODA_MID_GRAY_BORDER};">
     <h4 style="color: {LAMODA_LIME_ACCENT}; margin-bottom: 1rem;">🧠 Архитектура (C4-пример)</h4>
     <p style="color: #AAAAAA;">Диаграмма компонентов приложения</p>
-    """, unsafe_allow_html=True)
+    """,
+        unsafe_allow_html=True,
+    )
 
     G = nx.DiGraph()
-    G.add_edges_from([
-        ("👤 User", "🌐 API"),
-        ("🌐 API", "🔧 Service"),
-        ("🔧 Service", "💾 Repository"),
-        ("💾 Repository", "🗄️ Database"),
-    ])
+    G.add_edges_from(
+        [
+            ("👤 User", "🌐 API"),
+            ("🌐 API", "🔧 Service"),
+            ("🔧 Service", "💾 Repository"),
+            ("💾 Repository", "🗄️ Database"),
+        ]
+    )
     fig3, ax3 = plt.subplots(figsize=(6, 4))
     nx.draw(
-        G, with_labels=True, node_color="#CDFE00", edge_color="gray",
-        node_size=3000, font_size=10, font_weight="bold", ax=ax3
+        G,
+        with_labels=True,
+        node_color="#CDFE00",
+        edge_color="gray",
+        node_size=3000,
+        font_size=10,
+        font_weight="bold",
+        ax=ax3,
     )
     st.pyplot(fig3)
 
     st.markdown("</div>", unsafe_allow_html=True)
 
-elif not st.session_state.error_message: # Показываем приветствие, только если нет ошибки и нет README
+elif (
+    not st.session_state.error_message
+):  # Показываем приветствие, только если нет ошибки и нет README
     st.info(
         "👋 Добро пожаловать! "
-        "Введите URL GitHub репозитория в панели слева и нажмите 'Сгенерировать README'."
+        "Введите URL GitHub репозитория в панели слева и выберите нужное действие."
     )
     st.markdown(
         f"""
-    #### Как это работает?
+    #### 🚀 Доступные функции:
+    
+    **✨ Сгенерировать README** - создание нового README файла с нуля:
     1.  Загрузка файлов из вашего репозитория.
     2.  Анализ структуры кода (AST).
     3.  Генерация описаний и структуры документации с помощью LLM.
     4.  Готовый <span class="lamoda-lime-text">`README.md`</span> для вас!
+    
+    **🔄 Обновить README** - актуализация существующего README:
+    1.  Проверка наличия README в репозитории.
+    2.  Анализ последних merged Pull Request'ов.
+    3.  Если нет новых PR - уведомление о том, что обновление не требуется.
+    4.  Сравнение с текущим состоянием проекта.
+    5.  Умное обновление документации только при необходимости.
     """
     )
 
