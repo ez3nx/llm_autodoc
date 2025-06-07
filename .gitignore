@@ -9,3 +9,4 @@ __pycache__/
 # Environments
 .env
 .venv
+.flake8
