@@ -1,10 +1,13 @@
 # app/services/llm_agent.py
 import logging
 import os
+from pathlib import Path
 from typing import Any, Dict, List, Literal, Optional
+
 import requests
 from dotenv import load_dotenv
-from pathlib import Path
+
+from .architecture_analyzer import ArchitectureAnalyzer
 
 # Configure logging for LLM interactions
 logging.basicConfig(level=logging.INFO)
@@ -103,6 +106,7 @@ class LlmAgent:
     ):
         self.openrouter_api_key = openrouter_api_key or os.getenv("OPENROUTER_API_KEY")
         self.default_model_key = default_model
+        self.architecture_analyzer = ArchitectureAnalyzer()
         if not self.openrouter_api_key:
             print(
                 "ПРЕДУПРЕЖДЕНИЕ: LlmAgent - OpenRouter API ключ не найден! Функционал LLM будет ограничен."
@@ -121,6 +125,19 @@ class LlmAgent:
         files_content: Dict[str, str],
         style: str = "summary",
     ) -> str:
+        # Perform architecture analysis
+        arch_analysis = self.architecture_analyzer.analyze_architecture_patterns(
+            files_content, ast_data
+        )
+        arch_diagrams = self.architecture_analyzer.generate_architecture_diagrams(
+            arch_analysis
+        )
+
+        # Create architecture analysis summary
+        architecture_info = self._format_architecture_analysis(
+            arch_analysis, arch_diagrams
+        )
+
         project_structure_summary = "Основные компоненты проекта:\n"
         if ast_data.get("file_details"):
             for filepath, details in list(ast_data["file_details"].items())[:10]:
@@ -312,6 +329,8 @@ class LlmAgent:
 
 {project_structure_info}
 
+{architecture_info}
+
 {contextual_code_snippets}
 
 **Требования к README.md:**
@@ -328,13 +347,61 @@ class LlmAgent:
     *   **Установка:** Детальные шаги установки на основе найденных файлов зависимостей (requirements.txt, pyproject.toml, package.json и т.д.). Включи команды клонирования, установки зависимостей, настройки окружения.
     *   **Запуск / Использование:** Как запустить проект или использовать его основные функции. Укажи команды запуска, порты, переменные окружения если они очевидны из кода.
     *   **Развертывание (если применимо):** Если найдены файлы Docker, CI/CD конфигурации или другие файлы развертывания, опиши процесс деплоя в продакшн.
+    *   **Архитектура проекта:** Создай раздел с описанием архитектуры на основе анализа архитектурных паттернов. ОБЯЗАТЕЛЬНО включи Mermaid диаграммы для визуализации архитектуры и зависимостей.
 5.  {instruction}
-6.  **Качество:** Текст должен быть понятным, лаконичным и профессиональным. Избегай воды и общих фраз, если нет конкретной информации.
-7.  **Тон:** Нейтральный, технический.
+6.  **Диаграммы:** ОБЯЗАТЕЛЬНО включи в README следующие Mermaid диаграммы (если данные доступны):
+    - Диаграмма компонентов (```mermaid + код диаграммы + ```)
+    - Диаграмма зависимостей между модулями
+    - Диаграмма архитектурных слоев
+    - Диаграмма потока данных
+    Используй синтаксис Mermaid для создания диаграмм. Каждая диаграмма должна быть в отдельном блоке кода с языком "mermaid".
+7.  **Качество:** Текст должен быть понятным, лаконичным и профессиональным. Избегай воды и общих фраз, если нет конкретной информации.
+8.  **Тон:** Нейтральный, технический.
 
 **Пожалуйста, сгенерируй README.md на основе этой информации.**
 """
         return prompt.strip()
+
+    def _format_architecture_analysis(
+        self, arch_analysis: Dict[str, Any], arch_diagrams: Dict[str, str]
+    ) -> str:
+        """Format architecture analysis results for inclusion in prompts."""
+        info = "\n**Анализ архитектуры проекта:**\n"
+
+        # Detected patterns
+        if arch_analysis.get("detected_patterns"):
+            info += "Обнаруженные архитектурные паттерны:\n"
+            for pattern in arch_analysis["detected_patterns"]:
+                confidence = pattern["confidence"] * 100
+                info += f"- {pattern['name'].upper()}: {confidence:.0f}% уверенности\n"
+                info += (
+                    f"  Файлы-доказательства: {', '.join(pattern['evidence'][:3])}\n"
+                )
+
+        # Components
+        if arch_analysis.get("components"):
+            info += "\nОсновные компоненты:\n"
+            for comp in arch_analysis["components"][:5]:
+                info += f"- {comp['name']}: {comp['file_count']} файлов\n"
+                if comp.get("main_classes"):
+                    info += f"  Классы: {', '.join(comp['main_classes'][:3])}\n"
+                if comp.get("main_functions"):
+                    info += f"  Функции: {', '.join(comp['main_functions'][:3])}\n"
+
+        # Layers
+        if arch_analysis.get("layers"):
+            info += "\nАрхитектурные слои:\n"
+            for layer in arch_analysis["layers"]:
+                info += f"- {layer['name'].title()}: {layer['file_count']} файлов\n"
+
+        # Dependencies summary
+        if arch_analysis.get("dependencies"):
+            dep_count = len(arch_analysis["dependencies"])
+            info += (
+                f"\nЗависимости: найдено {dep_count} файлов с внешними зависимостями\n"
+            )
+
+        return info
 
     def generate_readme_content(
         self,
@@ -1114,4 +1181,3 @@ class LlmAgent:
             print(f"[LlmAgent] README успешно обновлен моделью {actual_model_name}.")
 
         return updated_readme
-
