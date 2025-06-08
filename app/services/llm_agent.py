@@ -90,11 +90,43 @@ def _ask_openrouter_llm(
         return f"⚠️ Непредвиденная ошибка при обращении к OpenRouter: {e}"
 
 
+def _clean_llm_response(response: str) -> str:
+    """
+    Clean LLM response from unwanted HTML tags and formatting issues.
+
+    Args:
+        response: Raw LLM response
+
+    Returns:
+        Cleaned response
+    """
+    import re
+
+    # Remove common HTML tags that might interfere with markdown rendering
+    html_tags_to_remove = [
+        r"</?div[^>]*>",
+        r"</?span[^>]*>",
+        r"</?p[^>]*>",
+        r"</?br[^>]*>",
+        r"</?hr[^>]*>",
+    ]
+
+    cleaned = response
+    for tag_pattern in html_tags_to_remove:
+        cleaned = re.sub(tag_pattern, "", cleaned, flags=re.IGNORECASE)
+
+    # Remove extra whitespace and normalize line endings
+    cleaned = re.sub(r"\n\s*\n\s*\n", "\n\n", cleaned)  # Remove triple+ newlines
+    cleaned = cleaned.strip()
+
+    return cleaned
+
+
 # --- Класс LlmAgent ---
 class LlmAgent:
     SUPPORTED_MODELS = Literal["claude-sonnet", "gemini-flash", "gpt-4o-mini"]
     DEFAULT_MODEL_MAPPING = {
-        "claude-sonnet": "anthropic/claude-3-sonnet",
+        "claude-sonnet": "anthropic/claude-sonnet-4",
         "gemini-flash": "google/gemini-flash-1.5",
         "gpt-4o-mini": "openai/gpt-4o",
     }
@@ -540,7 +572,7 @@ class LlmAgent:
                 f"[LlmAgent] README успешно сгенерирован моделью {actual_model_name}."
             )
 
-        return readme_markdown
+        return _clean_llm_response(readme_markdown)
 
     def generate_folder_documentation(
         self,
@@ -693,7 +725,7 @@ class LlmAgent:
                 f"[LlmAgent] Документация для папки {folder_name} успешно сгенерирована."
             )
 
-        return folder_doc
+        return _clean_llm_response(folder_doc)
 
     def generate_main_docs_readme(
         self,
@@ -826,7 +858,7 @@ class LlmAgent:
         else:
             print("[LlmAgent] Главный README для docs успешно сгенерирован.")
 
-        return main_readme
+        return _clean_llm_response(main_readme)
 
     def update_folder_documentation(
         self,
@@ -989,7 +1021,7 @@ class LlmAgent:
         else:
             print(f"[LlmAgent] Документация папки {folder_name} успешно обновлена.")
 
-        return updated_folder_doc
+        return _clean_llm_response(updated_folder_doc)
 
     def update_readme_content(
         self,
@@ -1180,7 +1212,7 @@ class LlmAgent:
         else:
             print(f"[LlmAgent] README успешно обновлен моделью {actual_model_name}.")
 
-        return updated_readme
+        return _clean_llm_response(updated_readme)
 
     def generate_release_notes(
         self,
@@ -1399,4 +1431,4 @@ class LlmAgent:
                 f"[LlmAgent] Release notes успешно сгенерированы моделью {actual_model_name}."
             )
 
-        return release_notes
+        return _clean_llm_response(release_notes)

@@ -518,14 +518,10 @@ if st.session_state.generated_readme:
         download_label = "💾 Скачать README.md"
         file_name = "README_generated.md"
 
-    st.markdown(
-        f"""
-    <div class="readme-container">
-    {st.session_state.generated_readme}
-    </div>
-    """,
-        unsafe_allow_html=True,
-    )
+    # Отображаем контент в стилизованном контейнере
+    st.markdown('<div class="readme-container">', unsafe_allow_html=True)
+    st.markdown(st.session_state.generated_readme, unsafe_allow_html=True)
+    st.markdown("</div>", unsafe_allow_html=True)
     st.download_button(
         label=download_label,
         data=st.session_state.generated_readme,
@@ -542,14 +538,9 @@ if st.session_state.generated_docs:
     # Показываем превью каждого файла
     for file_path, content in st.session_state.generated_docs.items():
         with st.expander(f"📄 {file_path}"):
-            st.markdown(
-                f"""
-            <div class="readme-container">
-            {content}
-            </div>
-            """,
-                unsafe_allow_html=True,
-            )
+            st.markdown('<div class="readme-container">', unsafe_allow_html=True)
+            st.markdown(content, unsafe_allow_html=True)
+            st.markdown("</div>", unsafe_allow_html=True)
 
     # Кнопка скачивания ZIP архива
     zip_data = create_docs_zip(st.session_state.generated_docs)
