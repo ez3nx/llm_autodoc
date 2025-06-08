@@ -15,15 +15,32 @@ LLM AutoDoc — инструмент для автоматической ген�
 
 ## 📦 Установка
 
-1. **Клонирование репозитория:**
-   ```bash
-   git clone https://github.com/yourusername/llm_autodoc.git
-   ```
-2. **Установка зависимостей:**
-   ```bash
-   cd llm_autodoc
-   pip install -r requirements.txt  # Или pip install -e . для разработки
-   ```
+### Способ 1: Установка из GitHub (рекомендуемый)
+
+```bash
+# Установка последней версии
+pip install git+https://github.com/ez3nx/llm_autodoc.git
+
+# Установка конкретной ветки
+pip install git+https://github.com/ez3nx/llm_autodoc.git@feature/ci-cd
+```
+
+### Способ 2: Установка для разработки
+
+```bash
+# Клонирование репозитория
+git clone https://github.com/ez3nx/llm_autodoc.git
+cd llm_autodoc
+
+# Установка в режиме разработки
+pip install -e .
+```
+
+### Способ 3: Установка из PyPI (когда будет опубликовано)
+
+```bash
+pip install llm-autodoc
+```
 
 ## 🔧 Быстрый старт
 
@@ -31,10 +48,21 @@ LLM AutoDoc — инструмент для автоматической ген�
 
 Создайте файл `.env` в корне проекта и добавьте следующие переменные:
 
-```
+```bash
 OPENROUTER_API_KEY=ваш_openrouter_api_ключ
-GITHUB_TOKEN=ваш_github_токен  #(Необязательно, для доступа к удаленным репозиториям)
+TOKEN_AUTODOC=ваш_github_токен  # (Опционально, для расширенных прав)
 ```
+
+Или установите переменные окружения:
+
+```bash
+export OPENROUTER_API_KEY="your_api_key_here"
+export TOKEN_AUTODOC="your_github_token_here"
+```
+
+**Получение API ключей:**
+- **OpenRouter API Key**: Зарегистрируйтесь на [OpenRouter](https://openrouter.ai/) и создайте API ключ
+- **GitHub Token**: Создайте персональный токен в GitHub Settings → Developer settings → Personal access tokens
 
 ### 2. Генерация документации (CLI)
 
@@ -116,8 +144,144 @@ MIT License.
 Этот репозиторий содержит пример проекта `test_project`, демонстрирующий возможности LLM AutoDoc.  Он включает в себя несколько утилитных функций и служит для тестирования генерации документации.  Более подробное описание находится в `test_project/README.md`.
 
 
-##  GitHub Actions
+## 🔄 CI/CD Интеграция
 
-Включен workflow для автоматической генерации документации при каждом push в репозиторий.  См. `.github/workflows/auto-docs.yml`.  Для работы workflow необходимы секреты `OPENROUTER_API_KEY` и (опционально) `GITHUB_TOKEN`.
+### Настройка автоматической генерации документации в вашем проекте
+
+LLM AutoDoc поддерживает автоматическую генерацию документации через GitHub Actions. При каждом Pull Request документация будет автоматически обновляться.
+
+#### 1. Создание workflow файла
+
+Создайте файл `.github/workflows/auto-docs.yml` в вашем репозитории:
+
+```yaml
+name: Auto Documentation Update
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches: [main, master, develop]
+  workflow_dispatch:
+
+jobs:
+  auto-docs:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+        token: ${{ secrets.GITHUB_TOKEN }}
+        ref: ${{ github.head_ref }}
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        
+    - name: Install llm-autodoc
+      run: |
+        python -m pip install --upgrade pip
+        pip install git+https://github.com/ez3nx/llm_autodoc.git
+        
+    - name: Generate documentation
+      env:
+        OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        TOKEN_AUTODOC: ${{ secrets.TOKEN_AUTODOC }}
+      run: |
+        echo "🚀 Starting automatic documentation generation..."
+        llm-autodoc generate . --output README_new.md --model gemini-flash --style summary
+        
+        if [ -f "README_new.md" ]; then
+          if [ -f "README.md" ]; then
+            if ! diff -q README.md README_new.md > /dev/null; then
+              mv README_new.md README.md
+              echo "DOCS_UPDATED=true" >> $GITHUB_ENV
+            else
+              rm README_new.md
+              echo "DOCS_UPDATED=false" >> $GITHUB_ENV
+            fi
+          else
+            mv README_new.md README.md
+            echo "DOCS_UPDATED=true" >> $GITHUB_ENV
+          fi
+        fi
+    
+    - name: Commit and push changes
+      if: env.DOCS_UPDATED == 'true'
+      run: |
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+        git add README.md
+        git commit -m "docs: auto-update README.md via LLM AutoDoc"
+        
+        BRANCH_NAME="${{ github.head_ref }}"
+        if [ -n "$BRANCH_NAME" ]; then
+          git push origin HEAD:$BRANCH_NAME
+        else
+          git push
+        fi
+    
+    - name: Comment on PR
+      if: env.DOCS_UPDATED == 'true' && github.event_name == 'pull_request'
+      uses: actions/github-script@v7
+      with:
+        script: |
+          github.rest.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            body: `## 📚 Documentation Auto-Updated
+            
+            README.md был автоматически обновлен с помощью LLM AutoDoc.
+            
+            *Обновление выполнено автоматически [LLM AutoDoc](https://github.com/ez3nx/llm_autodoc)*`
+          })
+```
+
+#### 2. Настройка секретов
+
+1. Перейдите в **Settings** → **Secrets and variables** → **Actions**
+2. Добавьте секреты:
+   - **`OPENROUTER_API_KEY`** (обязательный) - получите на [OpenRouter](https://openrouter.ai/)
+   - **`TOKEN_AUTODOC`** (опциональный) - персональный GitHub токен с правами `repo`
+
+#### 3. Способы запуска
+
+**Автоматический запуск:**
+- При создании Pull Request
+- При обновлении существующего PR
+
+**Ручной запуск:**
+- Перейдите в **Actions** → **Auto Documentation Update**
+- Нажмите **Run workflow**
+
+#### 4. Fallback режим
+
+Если `OPENROUTER_API_KEY` не настроен, система работает в fallback режиме:
+- Создается базовая документация без LLM
+- Анализируется структура проекта
+- Генерируется стандартный README
+
+### Пример использования в других проектах
+
+```bash
+# Установка в новом проекте
+pip install git+https://github.com/ez3nx/llm_autodoc.git
+
+# Локальная генерация
+export OPENROUTER_API_KEY="your_api_key"
+llm-autodoc generate . --model gemini-flash --style summary
+
+# Проверка результата
+cat README.md
+```
+
+Подробные инструкции по настройке секретов см. в [GITHUB_SECRETS_SETUP.md](GITHUB_SECRETS_SETUP.md).
 
 
