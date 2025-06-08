@@ -1,27 +1,25 @@
 # app/ui.py
 import os
 import sys
-import matplotlib.pyplot as plt
-import networkx as nx
-import pandas as pd
-import plotly.express as px
-from matplotlib.style.core import available
+
 # Добавляем корневую директорию проекта (на один уровень выше 'app') в sys.path
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
+import io
 import logging
+import zipfile
+from pathlib import Path
+
 import streamlit as st
 from dotenv import load_dotenv
+
 from app.services.ast_analyzer import AstAnalyzer
 from app.services.doc_generator import (
     DocGenerator,  # Не используется в текущей логике README, но оставлен
 )
 from app.services.github_parser import GithubParser
 from app.services.llm_agent import LlmAgent  # Уже импортирован, все ок
-import zipfile
-import io
-from pathlib import Path
 
 load_dotenv()  # Загружаем .env из корня проекта
 
@@ -162,6 +160,7 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
+
 # --- Инициализация сервисов ---
 @st.cache_resource
 def get_services():
@@ -183,18 +182,21 @@ def get_services():
         "doc_generator": DocGenerator(template_dir="app/templates"),
     }
 
+
 services = get_services()
 github_parser = services["github_parser"]
 ast_analyzer = services["ast_analyzer"]
 llm_agent = services["llm_agent"]
 
+
 # --- Функция для создания ZIP архива с документацией ---
 def create_docs_zip(docs_dict):
     zip_buffer = io.BytesIO()
-    with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+    with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
         for file_path, content in docs_dict.items():
             zip_file.writestr(file_path, content)
     return zip_buffer.getvalue()
+
 
 # --- Функция для группировки файлов по папкам ---
 def group_files_by_folder(files_content):
@@ -211,6 +213,7 @@ def group_files_by_folder(files_content):
         folders[folder][file_path] = content
 
     return folders
+
 
 # --- Состояние приложения ---
 if "generated_readme" not in st.session_state:
@@ -269,7 +272,11 @@ with st.sidebar:
     doc_mode = st.selectbox(
         "📚 Режим генерации документации",
         options=["single_readme", "docs_folder"],
-        format_func=lambda x: "📄 Один README.md" if x == "single_readme" else "📁 Папка docs (MD для каждой папки)",
+        format_func=lambda x: (
+            "📄 Один README.md"
+            if x == "single_readme"
+            else "📁 Папка docs (MD для каждой папки)"
+        ),
         index=0,
     )
 
@@ -290,7 +297,9 @@ with st.sidebar:
             st.session_state.generated_docs = None
             st.session_state.error_message = None
 
-            ui_logger.info(f"🚀 Starting documentation generation process for repository: {repo_url}")
+            ui_logger.info(
+                f"🚀 Starting documentation generation process for repository: {repo_url}"
+            )
 
             try:
                 with st.spinner("🚀 Магия ИИ в действии... Пожалуйста, подождите..."):
@@ -307,13 +316,17 @@ with st.sidebar:
                         spinner_placeholder.empty()
                         st.rerun()
 
-                    ui_logger.info(f"✅ Step 1/4 completed: Retrieved {len(files_content)} files")
+                    ui_logger.info(
+                        f"✅ Step 1/4 completed: Retrieved {len(files_content)} files"
+                    )
 
                     spinner_placeholder.text("2/4: Анализ структуры кода (AST)...")
                     ast_data = ast_analyzer.analyze_repository(files_content)
 
                     if doc_mode == "single_readme":
-                        spinner_placeholder.text("3/4: Генерация README с помощью LLM...")
+                        spinner_placeholder.text(
+                            "3/4: Генерация README с помощью LLM..."
+                        )
                         llm_output = llm_agent.generate_readme_content(
                             ast_data,
                             files_content,
@@ -321,23 +334,33 @@ with st.sidebar:
                             style="summary",
                         )
 
-                        if llm_output.startswith("⚠️ Ошибка") or llm_output.startswith("# Ошибка"):
-                            st.session_state.error_message = f"Ошибка от LLM: {llm_output}"
+                        if llm_output.startswith("⚠️ Ошибка") or llm_output.startswith(
+                            "# Ошибка"
+                        ):
+                            st.session_state.error_message = (
+                                f"Ошибка от LLM: {llm_output}"
+                            )
                             spinner_placeholder.empty()
                             st.rerun()
 
-                        spinner_placeholder.text("4/4: Формирование финального README.md...")
+                        spinner_placeholder.text(
+                            "4/4: Формирование финального README.md..."
+                        )
                         st.session_state.generated_readme = llm_output
 
                     else:  # docs_folder
                         spinner_placeholder.text("3/4: Группировка файлов по папкам...")
                         folders = group_files_by_folder(files_content)
 
-                        spinner_placeholder.text("4/4: Генерация документации для каждой папки...")
+                        spinner_placeholder.text(
+                            "4/4: Генерация документации для каждой папки..."
+                        )
                         docs_dict = {}
 
                         for folder_name, folder_files in folders.items():
-                            folder_ast_data = ast_analyzer.analyze_repository(folder_files)
+                            folder_ast_data = ast_analyzer.analyze_repository(
+                                folder_files
+                            )
 
                             doc_content = llm_agent.generate_folder_documentation(
                                 folder_name=folder_name,
@@ -346,7 +369,9 @@ with st.sidebar:
                                 model_key=selected_model_key,
                             )
 
-                            if not doc_content.startswith("⚠️ Ошибка") and not doc_content.startswith("# Ошибка"):
+                            if not doc_content.startswith(
+                                "⚠️ Ошибка"
+                            ) and not doc_content.startswith("# Ошибка"):
                                 docs_dict[f"docs/{folder_name}.md"] = doc_content
 
                         if docs_dict:
@@ -359,7 +384,9 @@ with st.sidebar:
                             docs_dict["docs/README.md"] = main_readme
                             st.session_state.generated_docs = docs_dict
                         else:
-                            st.session_state.error_message = "Не удалось сгенерировать документацию для папок."
+                            st.session_state.error_message = (
+                                "Не удалось сгенерировать документацию для папок."
+                            )
                             spinner_placeholder.empty()
                             st.rerun()
 
@@ -367,9 +394,12 @@ with st.sidebar:
                     st.success("🎉 Документация успешно сгенерирована!")
 
             except Exception as e:
-                st.session_state.error_message = f"Произошла непредвиденная ошибка: {str(e)}"
+                st.session_state.error_message = (
+                    f"Произошла непредвиденная ошибка: {str(e)}"
+                )
                 print(f"UI Error: {e}")
                 import traceback
+
                 traceback.print_exc()
                 if "spinner_placeholder" in locals():
                     spinner_placeholder.empty()
@@ -383,15 +413,21 @@ with st.sidebar:
             st.session_state.generated_docs = None
             st.session_state.error_message = None
 
-            ui_logger.info(f"🔄 Starting documentation update process for repository: {repo_url}")
+            ui_logger.info(
+                f"🔄 Starting documentation update process for repository: {repo_url}"
+            )
 
             try:
-                with st.spinner("🔄 Обновление документации... Пожалуйста, подождите..."):
+                with st.spinner(
+                    "🔄 Обновление документации... Пожалуйста, подождите..."
+                ):
                     spinner_placeholder = st.empty()
 
                     # Проверяем что существует для обновления
                     if doc_mode == "single_readme":
-                        spinner_placeholder.text("1/5: Проверка наличия README в репозитории...")
+                        spinner_placeholder.text(
+                            "1/5: Проверка наличия README в репозитории..."
+                        )
                         ui_logger.info("📋 Step 1/5: Checking if README exists")
                         readme_exists = github_parser.check_readme_exists(repo_url)
                         if not readme_exists:
@@ -402,8 +438,12 @@ with st.sidebar:
                             spinner_placeholder.empty()
                             st.rerun()
 
-                        spinner_placeholder.text("2/5: Получение существующего README...")
-                        existing_readme = github_parser.get_existing_readme_content(repo_url)
+                        spinner_placeholder.text(
+                            "2/5: Получение существующего README..."
+                        )
+                        existing_readme = github_parser.get_existing_readme_content(
+                            repo_url
+                        )
                         if not existing_readme:
                             st.session_state.error_message = "❌ Не удалось получить содержимое существующего README файла."
                             spinner_placeholder.empty()
@@ -415,19 +455,27 @@ with st.sidebar:
                     if not recent_prs:
                         st.session_state.error_message = None
                         spinner_placeholder.empty()
-                        st.info("ℹ️ В репозитории нет недавних merged Pull Request'ов. Документация не требует обновления.")
+                        st.info(
+                            "ℹ️ В репозитории нет недавних merged Pull Request'ов. Документация не требует обновления."
+                        )
                         ui_logger.info("ℹ️ No recent PRs found, skipping update")
                     else:
-                        spinner_placeholder.text("4/5: Анализ текущего состояния репозитория...")
+                        spinner_placeholder.text(
+                            "4/5: Анализ текущего состояния репозитория..."
+                        )
                         files_content = github_parser.get_repo_files_content(repo_url)
                         if not files_content:
-                            st.session_state.error_message = "❌ Не удалось получить файлы репозитория для анализа."
+                            st.session_state.error_message = (
+                                "❌ Не удалось получить файлы репозитория для анализа."
+                            )
                             spinner_placeholder.empty()
                             st.rerun()
 
                         ast_data = ast_analyzer.analyze_repository(files_content)
 
-                        spinner_placeholder.text("5/5: Обновление документации с помощью LLM...")
+                        spinner_placeholder.text(
+                            "5/5: Обновление документации с помощью LLM..."
+                        )
 
                         if doc_mode == "single_readme":
                             updated_readme = llm_agent.update_readme_content(
@@ -439,8 +487,12 @@ with st.sidebar:
                                 style="summary",
                             )
 
-                            if updated_readme.startswith("⚠️ Ошибка") or updated_readme.startswith("# Ошибка"):
-                                st.session_state.error_message = f"Ошибка от LLM: {updated_readme}"
+                            if updated_readme.startswith(
+                                "⚠️ Ошибка"
+                            ) or updated_readme.startswith("# Ошибка"):
+                                st.session_state.error_message = (
+                                    f"Ошибка от LLM: {updated_readme}"
+                                )
                                 spinner_placeholder.empty()
                                 st.rerun()
 
@@ -456,7 +508,9 @@ with st.sidebar:
                             docs_dict = {}
 
                             for folder_name, folder_files in folders.items():
-                                folder_ast_data = ast_analyzer.analyze_repository(folder_files)
+                                folder_ast_data = ast_analyzer.analyze_repository(
+                                    folder_files
+                                )
 
                                 updated_doc = llm_agent.update_folder_documentation(
                                     folder_name=folder_name,
@@ -466,7 +520,9 @@ with st.sidebar:
                                     model_key=selected_model_key,
                                 )
 
-                                if not updated_doc.startswith("⚠️ Ошибка") and not updated_doc.startswith("# Ошибка"):
+                                if not updated_doc.startswith(
+                                    "⚠️ Ошибка"
+                                ) and not updated_doc.startswith("# Ошибка"):
                                     docs_dict[f"docs/{folder_name}.md"] = updated_doc
 
                             if docs_dict:
@@ -479,16 +535,21 @@ with st.sidebar:
                                 st.session_state.generated_docs = docs_dict
                                 st.success("🎉 Документация папок успешно обновлена!")
                             else:
-                                st.session_state.error_message = "Не удалось обновить документацию папок."
+                                st.session_state.error_message = (
+                                    "Не удалось обновить документацию папок."
+                                )
                                 spinner_placeholder.empty()
                                 st.rerun()
 
                         spinner_placeholder.empty()
 
             except Exception as e:
-                st.session_state.error_message = f"Произошла непредвиденная ошибка при обновлении: {str(e)}"
+                st.session_state.error_message = (
+                    f"Произошла непредвиденная ошибка при обновлении: {str(e)}"
+                )
                 print(f"UI Update Error: {e}")
                 import traceback
+
                 traceback.print_exc()
                 if "spinner_placeholder" in locals():
                     spinner_placeholder.empty()
@@ -547,86 +608,11 @@ if st.session_state.generated_docs:
         type="secondary",
     )
 
-# Аналитика показывается только для single_readme режима
-if st.session_state.generated_readme and 'files_content' in locals():
-    # 📊 Дополнительная аналитика по проекту
-    st.markdown("---")
-    st.markdown("## 📊 Аналитика и визуализация проекта", unsafe_allow_html=True)
-
-    # 1. Распределение типов файлов
-    st.markdown(
-        f"""
-    <div style="background-color:{LAMODA_DARK_GRAY_SUBTLE}; padding: 1.5rem; border-radius: 12px; border: 1px solid {LAMODA_MID_GRAY_BORDER}; margin-bottom: 2rem;">
-    <h4 style="color: {LAMODA_LIME_ACCENT}; margin-bottom: 1rem;">📁 Распределение типов файлов в репозитории</h4>
-    """,
-        unsafe_allow_html=True,
-    )
-
-    file_extensions = [
-        file.split(".")[-1] for file in files_content.keys() if "." in file
-    ]
-    ext_counts = pd.Series(file_extensions).value_counts()
-    fig1, ax1 = plt.subplots()
-    ax1.pie(
-        ext_counts.values, labels=ext_counts.index, autopct="%1.1f%%", startangle=140
-    )
-    ax1.axis("equal")
-    st.pyplot(fig1)
-    st.markdown("</div>", unsafe_allow_html=True)
-
-    # 2. Структура проекта (treemap)
-    st.markdown(
-        f"""
-    <div style="background-color:{LAMODA_DARK_GRAY_SUBTLE}; padding: 1.5rem; border-radius: 12px; border: 1px solid {LAMODA_MID_GRAY_BORDER}; margin-bottom: 2rem;">
-    <h4 style="color: {LAMODA_LIME_ACCENT}; margin-bottom: 1rem;">🧱 Структура проекта (по размерам файлов)</h4>
-    """,
-        unsafe_allow_html=True,
-    )
-
-    tree_df = pd.DataFrame(
-        [{"path": f, "size": len(content)} for f, content in files_content.items()]
-    )
-    fig2 = px.treemap(
-        tree_df, path=["path"], values="size", title="Treemap", height=400
-    )
-    st.plotly_chart(fig2, use_container_width=True)
-    st.markdown("</div>", unsafe_allow_html=True)
-
-    # 3. Пример диаграммы архитектуры
-    st.markdown(
-        f"""
-    <div style="background-color:{LAMODA_DARK_GRAY_SUBTLE}; padding: 1.5rem; border-radius: 12px; border: 1px solid {LAMODA_MID_GRAY_BORDER};">
-    <h4 style="color: {LAMODA_LIME_ACCENT}; margin-bottom: 1rem;">🧠 Архитектура (C4-пример)</h4>
-    <p style="color: #AAAAAA;">Диаграмма компонентов приложения</p>
-    """,
-        unsafe_allow_html=True,
-    )
-
-    G = nx.DiGraph()
-    G.add_edges_from(
-        [
-            ("👤 User", "🌐 API"),
-            ("🌐 API", "🔧 Service"),
-            ("🔧 Service", "💾 Repository"),
-            ("💾 Repository", "🗄️ Database"),
-        ]
-    )
-    fig3, ax3 = plt.subplots(figsize=(6, 4))
-    nx.draw(
-        G,
-        with_labels=True,
-        node_color="#CDFE00",
-        edge_color="gray",
-        node_size=3000,
-        font_size=10,
-        font_weight="bold",
-        ax=ax3,
-    )
-    st.pyplot(fig3)
-    st.markdown("</div>", unsafe_allow_html=True)
 
 elif not st.session_state.error_message and not st.session_state.generated_docs:
-    st.info("👋 Добро пожаловать! Введите URL GitHub репозитория в панели слева и выберите нужное действие.")
+    st.info(
+        "👋 Добро пожаловать! Введите URL GitHub репозитория в панели слева и выберите нужное действие."
+    )
     st.markdown(
         f"""
     #### 🚀 Доступные режимы:
