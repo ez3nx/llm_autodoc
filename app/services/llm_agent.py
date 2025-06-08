@@ -90,11 +90,43 @@ def _ask_openrouter_llm(
         return f"⚠️ Непредвиденная ошибка при обращении к OpenRouter: {e}"
 
 
+def _clean_llm_response(response: str) -> str:
+    """
+    Clean LLM response from unwanted HTML tags and formatting issues.
+
+    Args:
+        response: Raw LLM response
+
+    Returns:
+        Cleaned response
+    """
+    import re
+
+    # Remove common HTML tags that might interfere with markdown rendering
+    html_tags_to_remove = [
+        r"</?div[^>]*>",
+        r"</?span[^>]*>",
+        r"</?p[^>]*>",
+        r"</?br[^>]*>",
+        r"</?hr[^>]*>",
+    ]
+
+    cleaned = response
+    for tag_pattern in html_tags_to_remove:
+        cleaned = re.sub(tag_pattern, "", cleaned, flags=re.IGNORECASE)
+
+    # Remove extra whitespace and normalize line endings
+    cleaned = re.sub(r"\n\s*\n\s*\n", "\n\n", cleaned)  # Remove triple+ newlines
+    cleaned = cleaned.strip()
+
+    return cleaned
+
+
 # --- Класс LlmAgent ---
 class LlmAgent:
     SUPPORTED_MODELS = Literal["claude-sonnet", "gemini-flash", "gpt-4o-mini"]
     DEFAULT_MODEL_MAPPING = {
-        "claude-sonnet": "anthropic/claude-3-sonnet",
+        "claude-sonnet": "anthropic/claude-sonnet-4",
         "gemini-flash": "google/gemini-flash-1.5",
         "gpt-4o-mini": "openai/gpt-4o",
     }
@@ -540,7 +572,7 @@ class LlmAgent:
                 f"[LlmAgent] README успешно сгенерирован моделью {actual_model_name}."
             )
 
-        return readme_markdown
+        return _clean_llm_response(readme_markdown)
 
     def generate_folder_documentation(
         self,
@@ -693,7 +725,7 @@ class LlmAgent:
                 f"[LlmAgent] Документация для папки {folder_name} успешно сгенерирована."
             )
 
-        return folder_doc
+        return _clean_llm_response(folder_doc)
 
     def generate_main_docs_readme(
         self,
@@ -826,7 +858,7 @@ class LlmAgent:
         else:
             print("[LlmAgent] Главный README для docs успешно сгенерирован.")
 
-        return main_readme
+        return _clean_llm_response(main_readme)
 
     def update_folder_documentation(
         self,
@@ -989,7 +1021,7 @@ class LlmAgent:
         else:
             print(f"[LlmAgent] Документация папки {folder_name} успешно обновлена.")
 
-        return updated_folder_doc
+        return _clean_llm_response(updated_folder_doc)
 
     def update_readme_content(
         self,
@@ -1180,4 +1212,223 @@ class LlmAgent:
         else:
             print(f"[LlmAgent] README успешно обновлен моделью {actual_model_name}.")
 
-        return updated_readme
+        return _clean_llm_response(updated_readme)
+
+    def generate_release_notes(
+        self,
+        pr_info: Dict[str, Any],
+        model_key: Optional[SUPPORTED_MODELS] = None,
+    ) -> str:
+        """
+        Generate release notes based on a specific pull request.
+
+        Args:
+            pr_info: Detailed information about the pull request
+            model_key: LLM model to use
+
+        Returns:
+            Release notes as markdown string
+        """
+        if not self.openrouter_api_key:
+            print("[LlmAgent] OpenRouter API ключ не настроен. Возврат заглушки.")
+            return "# Ошибка\n\nAPI ключ для LLM не настроен. Пожалуйста, проверьте конфигурацию."
+
+        current_model_key = model_key or self.default_model_key
+        actual_model_name = self.DEFAULT_MODEL_MAPPING.get(current_model_key)
+
+        if not actual_model_name:
+            print(
+                f"[LlmAgent] Неизвестный ключ модели: {current_model_key}. Используется модель по умолчанию."
+            )
+            actual_model_name = self.DEFAULT_MODEL_MAPPING.get(self.default_model_key)
+            if not actual_model_name:
+                return "# Ошибка\n\nНе удалось определить модель LLM для использования."
+
+        print(
+            f"[LlmAgent] Генерация Release Notes для PR #{pr_info.get('number', 'Unknown')}. Модель: {actual_model_name}"
+        )
+
+        # Log release notes generation start
+        llm_logger.info(
+            f"📝 Starting release notes generation for PR #{pr_info.get('number', 'Unknown')}"
+        )
+        llm_logger.info(f"🤖 Model: {actual_model_name}")
+        llm_logger.info(f"📋 Files changed: {len(pr_info.get('files_changed', []))}")
+        llm_logger.info(f"💬 Commits: {len(pr_info.get('commits', []))}")
+
+        # Format PR information for the prompt
+        pr_summary = f"""
+**Pull Request #{pr_info.get('number', 'Unknown')}**: {pr_info.get('title', 'No title')}
+
+**Автор**: {pr_info.get('user', 'Unknown')}
+**Статус**: {'Merged' if pr_info.get('merged') else pr_info.get('state', 'Unknown')}
+**Дата создания**: {pr_info.get('created_at', 'Unknown')}
+**Дата слияния**: {pr_info.get('merged_at', 'Not merged')}
+**Ветки**: {pr_info.get('head_branch', 'unknown')} → {pr_info.get('base_branch', 'unknown')}
+
+**Описание PR**:
+{pr_info.get('body', 'Описание отсутствует')}
+"""
+
+        # Format file changes
+        files_summary = "\n**Измененные файлы**:\n"
+        if pr_info.get("files_changed"):
+            for file_info in pr_info["files_changed"]:
+                status_emoji = {
+                    "added": "✅",
+                    "modified": "📝",
+                    "removed": "❌",
+                    "renamed": "🔄",
+                }.get(file_info.get("status", "unknown"), "📄")
+
+                files_summary += (
+                    f"- {status_emoji} `{file_info.get('filename', 'unknown')}` "
+                )
+                files_summary += f"(+{file_info.get('additions', 0)}/-{file_info.get('deletions', 0)})\n"
+
+                # Add patch information if available (limited)
+                if file_info.get("patch") and len(file_info["patch"]) < 1000:
+                    files_summary += f"  ```diff\n{file_info['patch'][:500]}{'...' if len(file_info['patch']) > 500 else ''}\n  ```\n"
+        else:
+            files_summary += "Информация об измененных файлах недоступна.\n"
+
+        # Format commits
+        commits_summary = "\n**Коммиты**:\n"
+        if pr_info.get("commits"):
+            for commit in pr_info["commits"][:10]:  # Limit to 10 commits
+                commits_summary += f"- `{commit.get('sha', 'unknown')[:8]}` {commit.get('message', 'No message').split(chr(10))[0]}\n"
+                commits_summary += f"  Автор: {commit.get('author', 'Unknown')} | {commit.get('date', 'Unknown date')}\n"
+        else:
+            commits_summary += "Информация о коммитах недоступна.\n"
+
+        # Construct the prompt
+        prompt = f"""
+Ты — опытный технический писатель, специализирующийся на создании качественных release notes и changelog'ов для программных проектов.
+
+Твоя задача — проанализировать информацию о Pull Request и создать профессиональные release notes в формате changelog.
+
+**Информация о Pull Request:**
+{pr_summary}
+{files_summary}
+{commits_summary}
+
+**Требования к Release Notes:**
+
+1. **Язык**: Русский
+2. **Формат**: Строго Markdown
+3. **Структура**: Используй стандартный формат changelog с категориями:
+   - 🚀 **Новые возможности** (Added/Features)
+   - 🔧 **Изменения** (Changed)
+   - 🐛 **Исправления** (Fixed)
+   - ❌ **Удалено** (Removed)
+   - 🔒 **Безопасность** (Security)
+   - ⚡ **Производительность** (Performance)
+   - 📚 **Документация** (Documentation)
+   - 🧪 **Тестирование** (Testing)
+
+4. **Стиль**: 
+   - Краткие, но информативные описания
+   - Фокус на пользовательской ценности
+   - Избегай технических деталей реализации
+   - Используй активный залог
+
+5. **Содержание**:
+   - Проанализируй изменения в файлах и коммиты
+   - Определи категорию каждого изменения
+   - Опиши влияние на пользователей
+   - Укажи breaking changes, если есть
+
+6. **Заголовок**: Используй формат "## [Версия] - YYYY-MM-DD" или "## PR #{pr_info.get('number', 'Unknown')}: {pr_info.get('title', 'No title')}"
+
+**Пример структуры:**
+```markdown
+## PR #123: Добавление новой функциональности аутентификации
+
+### 🚀 Новые возможности
+- Добавлена поддержка OAuth 2.0 аутентификации
+- Реализован механизм автоматического обновления токенов
+
+### 🔧 Изменения  
+- Обновлен интерфейс настроек пользователя
+- Изменена структура конфигурационных файлов
+
+### 🐛 Исправления
+- Исправлена ошибка с некорректным отображением статуса
+- Устранена проблема с утечкой памяти в модуле кэширования
+
+### 📚 Документация
+- Обновлена документация по API
+- Добавлены примеры использования новых функций
+```
+
+Создай release notes на основе предоставленной информации о PR:
+"""
+
+        # Save prompt to file for debugging
+        import datetime
+
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        prompt_filename = f"logs/llm_release_notes_prompt_{timestamp}.txt"
+        try:
+            import os
+
+            os.makedirs("logs", exist_ok=True)
+            with open(prompt_filename, "w", encoding="utf-8") as f:
+                f.write("=" * 80 + "\n")
+                f.write(
+                    f"LLM RELEASE NOTES PROMPT - {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
+                )
+                f.write("=" * 80 + "\n\n")
+                f.write(f"Model: {actual_model_name}\n")
+                f.write(f"PR Number: #{pr_info.get('number', 'Unknown')}\n")
+                f.write(f"PR Title: {pr_info.get('title', 'No title')}\n")
+                f.write(f"Files changed: {len(pr_info.get('files_changed', []))}\n")
+                f.write(f"Commits: {len(pr_info.get('commits', []))}\n")
+                f.write(f"Prompt length: {len(prompt)} characters\n")
+                f.write("\n" + "=" * 80 + "\n")
+                f.write("FULL PROMPT:\n")
+                f.write("=" * 80 + "\n\n")
+                f.write(prompt)
+                f.write("\n\n" + "=" * 80 + "\n")
+                f.write("END OF PROMPT\n")
+                f.write("=" * 80 + "\n")
+                llm_logger.info(
+                    f"💾 Release notes prompt saved to file: {prompt_filename}"
+                )
+        except Exception as e:
+            llm_logger.warning(f"⚠️ Failed to save release notes prompt to file: {e}")
+
+        release_notes = _ask_openrouter_llm(
+            prompt=prompt,
+            model_name=actual_model_name,
+            api_key=self.openrouter_api_key,
+        )
+
+        # Save LLM response to the same file
+        try:
+            with open(prompt_filename, "a", encoding="utf-8") as f:
+                f.write("\n\n" + "=" * 80 + "\n")
+                f.write("LLM RESPONSE:\n")
+                f.write("=" * 80 + "\n\n")
+                f.write(release_notes)
+                f.write("\n\n" + "=" * 80 + "\n")
+                f.write("END OF RESPONSE\n")
+                f.write("=" * 80 + "\n")
+                llm_logger.info(
+                    f"💾 LLM release notes response appended to file: {prompt_filename}"
+                )
+        except Exception as e:
+            llm_logger.warning(
+                f"⚠️ Failed to save LLM release notes response to file: {e}"
+            )
+
+        if "⚠️ Ошибка" in release_notes:
+            print(
+                f"[LlmAgent] Получена ошибка от LLM при генерации release notes: {release_notes}"
+            )
+        else:
+            print(
+                f"[LlmAgent] Release notes успешно сгенерированы моделью {actual_model_name}."
+            )
+
+        return _clean_llm_response(release_notes)
