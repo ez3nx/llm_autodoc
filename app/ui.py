@@ -14,6 +14,7 @@ from pathlib import Path
 import streamlit as st
 from dotenv import load_dotenv
 
+from app.services.architecture_analyzer import ArchitectureAnalyzer
 from app.services.ast_analyzer import AstAnalyzer
 from app.services.doc_generator import (
     DocGenerator,  # Не используется в текущей логике README, но оставлен
@@ -178,6 +179,7 @@ def get_services():
     return {
         "github_parser": GithubParser(github_token=github_token),
         "ast_analyzer": AstAnalyzer(),
+        "architecture_analyzer": ArchitectureAnalyzer(),
         "llm_agent": LlmAgent(openrouter_api_key=openrouter_api_key),
         "doc_generator": DocGenerator(template_dir="app/templates"),
     }
@@ -186,6 +188,7 @@ def get_services():
 services = get_services()
 github_parser = services["github_parser"]
 ast_analyzer = services["ast_analyzer"]
+architecture_analyzer = services["architecture_analyzer"]
 llm_agent = services["llm_agent"]
 
 
