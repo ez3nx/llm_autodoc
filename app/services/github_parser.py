@@ -147,6 +147,38 @@ class GithubParser:
         github_logger.warning(f"⚠️ Не удалось извлечь информацию о PR из URL: {pr_url}")
         return None
 
+    def detect_url_type(self, url: str) -> str:
+        """
+        Определяет тип GitHub URL.
+
+        Args:
+            url: GitHub URL
+
+        Returns:
+            'pr' если это ссылка на PR, 'repo' если это ссылка на репозиторий, 'unknown' если не удалось определить
+        """
+        url = url.strip()
+
+        # Проверяем, является ли это ссылкой на PR
+        pr_pattern = r"https://github\.com/[^/]+/[^/]+/pull/\d+"
+        if re.search(pr_pattern, url):
+            return "pr"
+
+        # Проверяем, является ли это ссылкой на репозиторий
+        repo_patterns = [
+            r"https://github\.com/[^/]+/[^/.]+/?$",
+            r"https://github\.com/[^/]+/[^/.]+\.git/?$",
+            r"http://github\.com/[^/]+/[^/.]+/?$",
+            r"git@github\.com:[^/]+/[^/.]+\.git$",
+        ]
+
+        for pattern in repo_patterns:
+            if re.search(pattern, url):
+                return "repo"
+
+        github_logger.warning(f"⚠️ Не удалось определить тип URL: {url}")
+        return "unknown"
+
     def _fetch_files_recursively(
         self,
         repo: Any,  # Тип github.Repository.Repository

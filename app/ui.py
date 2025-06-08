@@ -262,9 +262,9 @@ with st.sidebar:
     )
 
     repo_url = st.text_input(
-        "🔗 URL GitHub репозитория",
-        placeholder="https://github.com/owner/repository",
-        help="Введите полный URL публичного GitHub репозитория (для генерации документации).",
+        "🔗 URL GitHub репозитория или Pull Request",
+        placeholder="https://github.com/owner/repository или https://github.com/owner/repo/pull/123",
+        help="Введите URL репозитория для генерации документации или URL конкретного PR для Release Notes.",
     )
 
     # выбор модели LLM
@@ -285,13 +285,6 @@ with st.sidebar:
             else "📁 Папка docs (MD для каждой папки)"
         ),
         index=0,
-    )
-
-    # Поле для ввода URL PR
-    pr_url = st.text_input(
-        "🔗 URL Pull Request для Release Notes",
-        placeholder="https://github.com/owner/repo/pull/123",
-        help="Введите полную ссылку на Pull Request для генерации release notes",
     )
 
     # Создаем две колонки для кнопок
@@ -424,71 +417,87 @@ with st.sidebar:
             st.sidebar.warning("Пожалуйста, введите URL репозитория.")
 
     if release_notes_clicked:
-        if pr_url:
-            st.session_state.generated_readme = None
-            st.session_state.generated_docs = None
-            st.session_state.error_message = None
-            st.session_state.last_action = "release_notes"
+        if repo_url:
+            # Определяем тип URL
+            url_type = github_parser.detect_url_type(repo_url)
 
-            ui_logger.info(f"📝 Starting release notes generation for PR URL: {pr_url}")
+            if url_type == "pr":
+                st.session_state.generated_readme = None
+                st.session_state.generated_docs = None
+                st.session_state.error_message = None
+                st.session_state.last_action = "release_notes"
 
-            try:
-                with st.spinner(
-                    f"📝 Генерация Release Notes для PR... Пожалуйста, подождите..."
-                ):
-                    spinner_placeholder = st.empty()
+                ui_logger.info(
+                    f"📝 Starting release notes generation for PR URL: {repo_url}"
+                )
 
-                    spinner_placeholder.text(f"1/2: Получение информации о PR...")
-                    ui_logger.info(f"📋 Step 1/2: Fetching PR details from URL")
-
-                    pr_info = github_parser.get_pr_details_by_url(pr_url)
-                    if not pr_info:
-                        st.session_state.error_message = (
-                            f"❌ Не удалось найти PR по указанной ссылке. "
-                            "Проверьте URL и убедитесь, что PR существует."
-                        )
-                        spinner_placeholder.empty()
-                        st.rerun()
-
-                    # Сохраняем номер PR для отображения
-                    st.session_state.last_pr_number = pr_info.get("number")
-
-                    spinner_placeholder.text(
-                        f"2/2: Генерация Release Notes с помощью LLM..."
-                    )
-                    ui_logger.info(f"🤖 Step 2/2: Generating release notes with LLM")
-
-                    release_notes = llm_agent.generate_release_notes(
-                        pr_info=pr_info,
-                        model_key=selected_model_key,
-                    )
-
-                    if release_notes.startswith("⚠️ Ошибка") or release_notes.startswith(
-                        "# Ошибка"
+                try:
+                    with st.spinner(
+                        f"📝 Генерация Release Notes для PR... Пожалуйста, подождите..."
                     ):
-                        st.session_state.error_message = (
-                            f"Ошибка от LLM: {release_notes}"
+                        spinner_placeholder = st.empty()
+
+                        spinner_placeholder.text(f"1/2: Получение информации о PR...")
+                        ui_logger.info(f"📋 Step 1/2: Fetching PR details from URL")
+
+                        pr_info = github_parser.get_pr_details_by_url(repo_url)
+                        if not pr_info:
+                            st.session_state.error_message = (
+                                f"❌ Не удалось найти PR по указанной ссылке. "
+                                "Проверьте URL и убедитесь, что PR существует."
+                            )
+                            spinner_placeholder.empty()
+                            st.rerun()
+
+                        # Сохраняем номер PR для отображения
+                        st.session_state.last_pr_number = pr_info.get("number")
+
+                        spinner_placeholder.text(
+                            f"2/2: Генерация Release Notes с помощью LLM..."
                         )
+                        ui_logger.info(
+                            f"🤖 Step 2/2: Generating release notes with LLM"
+                        )
+
+                        release_notes = llm_agent.generate_release_notes(
+                            pr_info=pr_info,
+                            model_key=selected_model_key,
+                        )
+
+                        if release_notes.startswith(
+                            "⚠️ Ошибка"
+                        ) or release_notes.startswith("# Ошибка"):
+                            st.session_state.error_message = (
+                                f"Ошибка от LLM: {release_notes}"
+                            )
+                            spinner_placeholder.empty()
+                            st.rerun()
+
+                        st.session_state.generated_readme = release_notes
                         spinner_placeholder.empty()
-                        st.rerun()
+                        st.success(
+                            f"🎉 Release Notes для PR #{pr_info.get('number')} успешно сгенерированы!"
+                        )
 
-                    st.session_state.generated_readme = release_notes
-                    spinner_placeholder.empty()
-                    st.success(
-                        f"🎉 Release Notes для PR #{pr_info.get('number')} успешно сгенерированы!"
-                    )
+                except Exception as e:
+                    st.session_state.error_message = f"Произошла непредвиденная ошибка при генерации release notes: {str(e)}"
+                    print(f"UI Release Notes Error: {e}")
+                    import traceback
 
-            except Exception as e:
-                st.session_state.error_message = f"Произошла непредвиденная ошибка при генерации release notes: {str(e)}"
-                print(f"UI Release Notes Error: {e}")
-                import traceback
-
-                traceback.print_exc()
-                if "spinner_placeholder" in locals():
-                    spinner_placeholder.empty()
-                st.rerun()
+                    traceback.print_exc()
+                    if "spinner_placeholder" in locals():
+                        spinner_placeholder.empty()
+                    st.rerun()
+            elif url_type == "repo":
+                st.sidebar.warning(
+                    "❌ Для генерации Release Notes введите ссылку на конкретный Pull Request, а не на репозиторий."
+                )
+            else:
+                st.sidebar.warning(
+                    "❌ Неверный формат URL. Введите ссылку на GitHub Pull Request."
+                )
         else:
-            st.sidebar.warning("Пожалуйста, введите URL Pull Request.")
+            st.sidebar.warning("Пожалуйста, введите URL.")
 
 # Основная область для вывода
 if st.session_state.error_message:
@@ -575,10 +584,11 @@ elif not st.session_state.error_message and not st.session_state.generated_docs:
     5. Скачивание ZIP архива с полной документацией
 
     **📝 Release Notes** - генерация changelog на основе конкретного Pull Request:
-    1. Введите полную ссылку на PR (например, https://github.com/owner/repo/pull/123)
-    2. Анализ изменений в файлах и коммитах
-    3. Генерация структурированных release notes
-    4. Готовый changelog в формате Markdown
+    1. Введите полную ссылку на PR в поле URL (например, https://github.com/owner/repo/pull/123)
+    2. Нажмите кнопку "📝 Release Notes"
+    3. Анализ изменений в файлах и коммитах
+    4. Генерация структурированных release notes
+    5. Готовый changelog в формате Markdown
     """
     )
 
