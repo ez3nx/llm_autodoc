@@ -221,6 +221,10 @@ def group_files_by_folder(files_content):
 # --- Состояние приложения ---
 if "generated_readme" not in st.session_state:
     st.session_state.generated_readme = None
+if "last_action" not in st.session_state:
+    st.session_state.last_action = None
+if "last_pr_number" not in st.session_state:
+    st.session_state.last_pr_number = None
 if "generated_docs" not in st.session_state:
     st.session_state.generated_docs = None
 if "error_message" not in st.session_state:
@@ -260,7 +264,7 @@ with st.sidebar:
     repo_url = st.text_input(
         "🔗 URL GitHub репозитория",
         placeholder="https://github.com/owner/repository",
-        help="Введите полный URL публичного GitHub репозитория.",
+        help="Введите полный URL публичного GitHub репозитория (для генерации документации).",
     )
 
     # выбор модели LLM
@@ -283,6 +287,13 @@ with st.sidebar:
         index=0,
     )
 
+    # Поле для ввода URL PR
+    pr_url = st.text_input(
+        "🔗 URL Pull Request для Release Notes",
+        placeholder="https://github.com/owner/repo/pull/123",
+        help="Введите полную ссылку на Pull Request для генерации release notes",
+    )
+
     # Создаем две колонки для кнопок
     col1, col2 = st.columns(2)
     with col1:
@@ -290,8 +301,8 @@ with st.sidebar:
             "✨ Сгенерировать", type="secondary", use_container_width=True
         )
     with col2:
-        update_clicked = st.button(
-            "🔄 Обновить", type="secondary", use_container_width=True
+        release_notes_clicked = st.button(
+            "📝 Release Notes", type="secondary", use_container_width=True
         )
 
     if generate_clicked:
@@ -299,6 +310,8 @@ with st.sidebar:
             st.session_state.generated_readme = None
             st.session_state.generated_docs = None
             st.session_state.error_message = None
+            st.session_state.last_action = "generate"
+            st.session_state.last_pr_number = None
 
             ui_logger.info(
                 f"🚀 Starting documentation generation process for repository: {repo_url}"
@@ -410,147 +423,64 @@ with st.sidebar:
         else:
             st.sidebar.warning("Пожалуйста, введите URL репозитория.")
 
-    if update_clicked:
-        if repo_url:
+    if release_notes_clicked:
+        if pr_url:
             st.session_state.generated_readme = None
             st.session_state.generated_docs = None
             st.session_state.error_message = None
+            st.session_state.last_action = "release_notes"
 
-            ui_logger.info(
-                f"🔄 Starting documentation update process for repository: {repo_url}"
-            )
+            ui_logger.info(f"📝 Starting release notes generation for PR URL: {pr_url}")
 
             try:
                 with st.spinner(
-                    "🔄 Обновление документации... Пожалуйста, подождите..."
+                    f"📝 Генерация Release Notes для PR... Пожалуйста, подождите..."
                 ):
                     spinner_placeholder = st.empty()
 
-                    # Проверяем что существует для обновления
-                    if doc_mode == "single_readme":
-                        spinner_placeholder.text(
-                            "1/5: Проверка наличия README в репозитории..."
-                        )
-                        ui_logger.info("📋 Step 1/5: Checking if README exists")
-                        readme_exists = github_parser.check_readme_exists(repo_url)
-                        if not readme_exists:
-                            st.session_state.error_message = (
-                                "❌ В вашем репозитории нет README файла. "
-                                "Попробуйте сначала сгенерировать его."
-                            )
-                            spinner_placeholder.empty()
-                            st.rerun()
+                    spinner_placeholder.text(f"1/2: Получение информации о PR...")
+                    ui_logger.info(f"📋 Step 1/2: Fetching PR details from URL")
 
-                        spinner_placeholder.text(
-                            "2/5: Получение существующего README..."
+                    pr_info = github_parser.get_pr_details_by_url(pr_url)
+                    if not pr_info:
+                        st.session_state.error_message = (
+                            f"❌ Не удалось найти PR по указанной ссылке. "
+                            "Проверьте URL и убедитесь, что PR существует."
                         )
-                        existing_readme = github_parser.get_existing_readme_content(
-                            repo_url
-                        )
-                        if not existing_readme:
-                            st.session_state.error_message = "❌ Не удалось получить содержимое существующего README файла."
-                            spinner_placeholder.empty()
-                            st.rerun()
-
-                    spinner_placeholder.text("3/5: Получение последних merged PR...")
-                    recent_prs = github_parser.get_recent_merged_prs(repo_url, limit=10)
-
-                    if not recent_prs:
-                        st.session_state.error_message = None
                         spinner_placeholder.empty()
-                        st.info(
-                            "ℹ️ В репозитории нет недавних merged Pull Request'ов. Документация не требует обновления."
+                        st.rerun()
+
+                    # Сохраняем номер PR для отображения
+                    st.session_state.last_pr_number = pr_info.get("number")
+
+                    spinner_placeholder.text(
+                        f"2/2: Генерация Release Notes с помощью LLM..."
+                    )
+                    ui_logger.info(f"🤖 Step 2/2: Generating release notes with LLM")
+
+                    release_notes = llm_agent.generate_release_notes(
+                        pr_info=pr_info,
+                        model_key=selected_model_key,
+                    )
+
+                    if release_notes.startswith("⚠️ Ошибка") or release_notes.startswith(
+                        "# Ошибка"
+                    ):
+                        st.session_state.error_message = (
+                            f"Ошибка от LLM: {release_notes}"
                         )
-                        ui_logger.info("ℹ️ No recent PRs found, skipping update")
-                    else:
-                        spinner_placeholder.text(
-                            "4/5: Анализ текущего состояния репозитория..."
-                        )
-                        files_content = github_parser.get_repo_files_content(repo_url)
-                        if not files_content:
-                            st.session_state.error_message = (
-                                "❌ Не удалось получить файлы репозитория для анализа."
-                            )
-                            spinner_placeholder.empty()
-                            st.rerun()
-
-                        ast_data = ast_analyzer.analyze_repository(files_content)
-
-                        spinner_placeholder.text(
-                            "5/5: Обновление документации с помощью LLM..."
-                        )
-
-                        if doc_mode == "single_readme":
-                            updated_readme = llm_agent.update_readme_content(
-                                existing_readme=existing_readme,
-                                recent_prs=recent_prs,
-                                ast_data=ast_data,
-                                files_content=files_content,
-                                model_key=selected_model_key,
-                                style="summary",
-                            )
-
-                            if updated_readme.startswith(
-                                "⚠️ Ошибка"
-                            ) or updated_readme.startswith("# Ошибка"):
-                                st.session_state.error_message = (
-                                    f"Ошибка от LLM: {updated_readme}"
-                                )
-                                spinner_placeholder.empty()
-                                st.rerun()
-
-                            st.session_state.generated_readme = updated_readme
-
-                            if updated_readme.strip() == existing_readme.strip():
-                                st.info("ℹ️ README не требует обновления.")
-                            else:
-                                st.success("🎉 README успешно обновлен!")
-
-                        else:  # docs_folder
-                            folders = group_files_by_folder(files_content)
-                            docs_dict = {}
-
-                            for folder_name, folder_files in folders.items():
-                                folder_ast_data = ast_analyzer.analyze_repository(
-                                    folder_files
-                                )
-
-                                updated_doc = llm_agent.update_folder_documentation(
-                                    folder_name=folder_name,
-                                    recent_prs=recent_prs,
-                                    ast_data=folder_ast_data,
-                                    files_content=folder_files,
-                                    model_key=selected_model_key,
-                                )
-
-                                if not updated_doc.startswith(
-                                    "⚠️ Ошибка"
-                                ) and not updated_doc.startswith("# Ошибка"):
-                                    docs_dict[f"docs/{folder_name}.md"] = updated_doc
-
-                            if docs_dict:
-                                main_readme = llm_agent.generate_main_docs_readme(
-                                    folders=list(folders.keys()),
-                                    ast_data=ast_data,
-                                    model_key=selected_model_key,
-                                )
-                                docs_dict["docs/README.md"] = main_readme
-                                st.session_state.generated_docs = docs_dict
-                                st.success("🎉 Документация папок успешно обновлена!")
-                            else:
-                                st.session_state.error_message = (
-                                    "Не удалось обновить документацию папок."
-                                )
-                                spinner_placeholder.empty()
-                                st.rerun()
-
                         spinner_placeholder.empty()
+                        st.rerun()
+
+                    st.session_state.generated_readme = release_notes
+                    spinner_placeholder.empty()
+                    st.success(
+                        f"🎉 Release Notes для PR #{pr_info.get('number')} успешно сгенерированы!"
+                    )
 
             except Exception as e:
-                st.session_state.error_message = (
-                    f"Произошла непредвиденная ошибка при обновлении: {str(e)}"
-                )
-                print(f"UI Update Error: {e}")
+                st.session_state.error_message = f"Произошла непредвиденная ошибка при генерации release notes: {str(e)}"
+                print(f"UI Release Notes Error: {e}")
                 import traceback
 
                 traceback.print_exc()
@@ -558,7 +488,7 @@ with st.sidebar:
                     spinner_placeholder.empty()
                 st.rerun()
         else:
-            st.sidebar.warning("Пожалуйста, введите URL репозитория.")
+            st.sidebar.warning("Пожалуйста, введите URL Pull Request.")
 
 # Основная область для вывода
 if st.session_state.error_message:
@@ -566,7 +496,19 @@ if st.session_state.error_message:
 
 if st.session_state.generated_readme:
     st.markdown("---")
-    st.subheader("📄 Сгенерированный README.md")
+    # Определяем заголовок и имя файла в зависимости от того, что было сгенерировано
+    if (
+        st.session_state.last_action == "release_notes"
+        and st.session_state.last_pr_number
+    ):
+        st.subheader(f"📝 Release Notes для PR #{st.session_state.last_pr_number}")
+        download_label = "💾 Скачать Release Notes"
+        file_name = f"release_notes_PR_{st.session_state.last_pr_number}.md"
+    else:
+        st.subheader("📄 Сгенерированный README.md")
+        download_label = "💾 Скачать README.md"
+        file_name = "README_generated.md"
+
     st.markdown(
         f"""
     <div class="readme-container">
@@ -576,9 +518,9 @@ if st.session_state.generated_readme:
         unsafe_allow_html=True,
     )
     st.download_button(
-        label="💾 Скачать README.md",
+        label=download_label,
         data=st.session_state.generated_readme,
-        file_name="README_generated.md",
+        file_name=file_name,
         mime="text/markdown",
         use_container_width=True,
         type="secondary",
@@ -632,7 +574,11 @@ elif not st.session_state.error_message and not st.session_state.generated_docs:
     4. Создание основного README.md для папки docs
     5. Скачивание ZIP архива с полной документацией
 
-    **🔄 Обновить** - актуализация существующей документации на основе последних merged Pull Request'ов.
+    **📝 Release Notes** - генерация changelog на основе конкретного Pull Request:
+    1. Введите полную ссылку на PR (например, https://github.com/owner/repo/pull/123)
+    2. Анализ изменений в файлах и коммитах
+    3. Генерация структурированных release notes
+    4. Готовый changelog в формате Markdown
     """
     )
 
